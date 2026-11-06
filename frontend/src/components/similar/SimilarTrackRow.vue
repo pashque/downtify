@@ -1,16 +1,18 @@
 <template>
   <div
-    class="group flex h-16 items-center gap-3 rounded-[12px] px-3 transition-colors hover:bg-surface"
+    :data-track-row="song.song_id || song.url || `${song.artist}|${song.name}`"
+    class="group source-track-grid source-hide-album h-16 rounded-[12px] px-3 transition-colors hover:bg-surface"
+    @click="rowPlaybackClick($event) && play.ensurePlaying()"
   >
     <span
-      v-if="index !== null"
-      class="tabular w-6 text-center text-[13px] text-faint max-sm:hidden"
+      data-column="number"
+      class="source-number tabular w-6 text-center text-[13px] text-faint max-sm:hidden"
     >
-      {{ index + 1 }}
+      {{ index === null ? '' : index + 1 }}
     </span>
     <button
       type="button"
-      class="relative shrink-0"
+      class="source-cover relative shrink-0"
       :aria-label="play.playLabel.value"
       :disabled="!play.playable.value"
       @click.stop="play.toggle()"
@@ -36,36 +38,26 @@
         <AppIcon v-else :name="overlayIcon" :size="16" />
       </span>
     </button>
-    <div class="min-w-0 flex-1">
+    <div data-column="title" class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold">{{ song.name }}</p>
-      <p class="truncate text-[13px] text-muted">{{ artistName }}</p>
+      <p class="truncate text-[13px] text-muted"><ArtistCredits :artists="song.artists" :artist="song.artist || t('common.unknownArtist')" /></p>
     </div>
-    <span
-      v-if="song.album_name"
-      class="hidden w-[30%] truncate text-[13px] text-muted lg:block"
-      >{{ song.album_name }}</span
-    >
-    <span
-      class="tabular hidden w-12 text-right text-[13px] text-muted sm:block"
-    >
-      {{ song.duration ? formatDuration(song.duration) : '' }}
-    </span>
+    <span v-if="false" data-column="album" class="source-album" />
+    <span data-column="time" data-track-duration class="source-duration tabular text-right text-[13px] text-muted">{{ song.duration ? formatDuration(song.duration) : '' }}</span>
+    <TrackFormat data-column="format" class="source-format" :formats="location?.formats || []" />
     <!-- Same grid as every other track row: the wand re-seeds the mix
          from this track, then the download state. Wide enough for the
          wand plus the download's widest state (see TrackDownPlay). -->
-    <div class="flex w-40 shrink-0 items-center justify-end gap-2">
-      <SimilarButton :artist="firstArtist" :title="song.name" filled />
-      <UiBadge v-if="inLibrary" tone="accent" icon="check">
-        {{ t('search.inLibrary') }}
-      </UiBadge>
+    <div data-column="download" data-track-download-cell class="source-download">
+      <span v-if="inLibrary || location?.downloaded" role="img" :aria-label="t('search.inLibrary')" class="flex size-9 items-center justify-center text-muted"><AppIcon name="check" :size="16" /></span>
       <DownloadState
         v-else-if="resolved || downloadable"
-        :song="resolved || song"
+        :song="resolved || song" :downloaded="location?.downloaded" round
       />
       <button
         v-else
         type="button"
-        class="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-fg-3 transition-colors hover:bg-accent hover:text-on-accent disabled:opacity-50"
+        class="flex size-9 shrink-0 items-center justify-center text-muted transition-colors hover:text-accent disabled:opacity-50"
         :title="t('actions.download')"
         :aria-label="t('actions.downloadItem', { name: song.name })"
         :disabled="resolving"
@@ -79,10 +71,16 @@
         />
       </button>
     </div>
+    <LocationBadges data-column="locations" class="source-locations" :location="location" />
+    <span data-column="heart" class="source-heart"><LocalLike :song="song" /></span>
+    <span data-column="menu" class="source-actions"><SourceSongMenu :song="song" /></span>
   </div>
 </template>
 
 <script setup>
+import { rowPlaybackClick } from '/src/lib/rowPlayback'
+import ArtistCredits from '/src/components/library/ArtistCredits.vue'
+import LocalLike from '/src/components/library/LocalLike.vue'
 // One similar track: full playback on the cover (from the library, else
 // streamed), and a download button straight from its video id. The row
 // hands off to DownloadState, so progress, queue and retry look exactly
@@ -92,7 +90,10 @@ import AppIcon from '../ui/AppIcon.vue'
 import CoverArt from '../ui/CoverArt.vue'
 import UiBadge from '../ui/UiBadge.vue'
 import DownloadState from '../search/DownloadState.vue'
-import SimilarButton from './SimilarButton.vue'
+import TrackFormat from '../library/TrackFormat.vue'
+import LocationBadges from '../library/LocationBadges.vue'
+import '/src/styles/trackRows.css'
+import SourceSongMenu from '../library/SourceSongMenu.vue'
 import { formatDuration } from '/src/lib/format'
 import API from '/src/model/api'
 import { useDownloadManager } from '/src/model/download'
@@ -104,6 +105,7 @@ import { useI18n } from '/src/i18n'
 
 const props = defineProps({
   song: { type: Object, required: true },
+  location: { type: Object, default: null },
   index: { type: Number, default: null },
   // The whole song list, for a mixed queue (downloaded rows from the
   // library, the rest streamed) the player works through to the end.
@@ -125,9 +127,6 @@ const artistName = computed(
     props.song.artist ||
     t('common.unknownArtist')
 )
-const firstArtist = computed(
-  () => (props.song.artists || [])[0] || props.song.artist || ''
-)
 
 // Playing works like every other track row: a downloaded song plays in
 // full through the built-in player (so the player shows this track),
@@ -140,7 +139,7 @@ const overlayIcon = computed(() =>
 )
 
 const inLibrary = computed(() =>
-  library.hasSong(artistName.value, props.song.name)
+  library.hasSong(artistName.value, props.song.name, props.song)
 )
 
 // Every row already is a downloadable song (video id + link).

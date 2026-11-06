@@ -10,6 +10,7 @@ import { useReplaceAudio } from '/src/model/replaceAudio'
 import { useVisibility } from '/src/model/visibility'
 import { canReplace } from '/src/lib/replaceAudio'
 import { saveName } from '/src/lib/paths'
+import { albumRoute } from '/src/lib/albumRouting'
 import { useI18n } from '/src/i18n'
 
 export function useTrackActions() {
@@ -135,10 +136,7 @@ export function useTrackActions() {
         icon: 'disc',
         hidden: !track.album || hide.includes('album'),
         action: () =>
-          router.push({
-            name: 'Album',
-            query: { artist: track.albumArtist, title: track.album },
-          }),
+          router.push(albumRoute(track, context)),
       },
       {
         label: t('actions.goToArtist'),

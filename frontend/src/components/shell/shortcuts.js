@@ -82,7 +82,8 @@ export function createShortcutHandler({
     }
     switch (key) {
       case ' ':
-        if (event.target?.tagName === 'BUTTON') return
+        // Always play/pause - also on a focused button, which the
+        // browser would otherwise click instead.
         event.preventDefault()
         player.toggle()
         break
@@ -155,6 +156,16 @@ export function createShortcutHandler({
 
 export function useShortcuts(options) {
   const onKeydown = createShortcutHandler(options)
-  onMounted(() => window.addEventListener('keydown', onKeydown))
-  onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+  // Buttons activate on Space keyup; keydown already toggled playback.
+  const onKeyup = (event) => {
+    if (event.key === ' ' && event.target?.tagName === 'BUTTON') event.preventDefault()
+  }
+  onMounted(() => {
+    window.addEventListener('keydown', onKeydown)
+    window.addEventListener('keyup', onKeyup)
+  })
+  onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown)
+    window.removeEventListener('keyup', onKeyup)
+  })
 }

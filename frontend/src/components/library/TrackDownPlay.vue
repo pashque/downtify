@@ -1,12 +1,14 @@
 <template>
   <div
-    class="group flex h-16 items-center gap-3 rounded-[12px] px-3 transition-colors"
+    class="group source-track-grid h-16 rounded-[12px] px-3 transition-colors"
+    :data-track-row="song.song_id || song.url || song.file"
     :class="
-      selected ? 'bg-accent/8' : highlighted ? 'bg-surface' : 'hover:bg-surface'
+      [selected ? 'bg-accent/8' : highlighted ? 'bg-surface' : 'hover:bg-surface', { 'source-selectable': selectable, 'source-hide-album': hideAlbum }]
     "
     :data-marked="marked || undefined"
     @click="onRowClick"
-    @dblclick="ensurePlaying"
+    @dblclick="rowPlaybackClick($event) && ensurePlaying()"
+    @contextmenu="emit('contextmenu', $event)"
   >
     <button
       v-if="selectable"
@@ -26,8 +28,7 @@
       <AppIcon v-if="selected" name="check" :size="13" stroke-width="3" />
     </button>
     <span
-      v-if="index !== null"
-      class="flex w-6 items-center justify-center text-[13px] text-faint max-sm:hidden"
+      data-column="number" class="source-number flex w-6 items-center justify-center text-[13px] text-faint max-sm:hidden"
     >
       <EqBars v-if="isCurrent" :size="12" :playing="player.isPlaying.value" />
       <!-- A stream being resolved, where the number was. -->
@@ -39,7 +40,7 @@
       />
       <template v-else>
         <span class="tabular" :class="playable ? 'group-hover:hidden' : ''">{{
-          index + 1
+          index === null ? '' : index + 1
         }}</span>
         <button
           v-if="playable"
@@ -56,7 +57,7 @@
     <button
       v-if="playable"
       type="button"
-      class="shrink-0"
+      class="source-cover shrink-0"
       :aria-label="playLabel"
       @click.stop="toggle"
     >
@@ -74,10 +75,10 @@
       :name="song.album_name || song.name"
       rounded="rounded-[8px]"
       :letter-size="14"
-      class="size-11"
+      class="source-cover size-11"
     />
 
-    <div class="min-w-0 flex-1">
+    <div data-column="title" class="min-w-0 flex-1">
       <p class="flex items-center gap-1.5">
         <RouterLink
           v-if="to"
@@ -97,40 +98,42 @@
         <ExplicitBadge v-if="song.explicit" />
       </p>
       <p class="truncate text-[13px] text-muted">
-        {{ artists
-        }}<span v-if="song.album_name && !hideAlbum" class="lg:hidden">
+        <ArtistCredits :artists="song.artists" :artist="song.artist || t('common.unknownArtist')" /><span v-if="song.album_name && !hideAlbum" class="lg:hidden">
           · {{ song.album_name }}</span
         >
       </p>
     </div>
     <span
       v-if="!hideAlbum"
-      class="hidden w-[30%] truncate text-[13px] text-muted lg:block"
+      data-column="album" class="source-album truncate text-[13px] text-muted"
       >{{ song.album_name }}</span
     >
     <span
-      class="tabular hidden w-12 text-right text-[13px] text-muted sm:block"
+      data-track-duration data-column="time"
+      class="source-duration tabular hidden w-12 text-right text-[13px] text-muted sm:block"
     >
       {{ song.duration ? formatDuration(song.duration) : '' }}
     </span>
-    <!-- Not downloaded: the download button, with its progress and retry;
-         downloaded: the "In library" label. Playing is on the left. A click
-         here is the download's own, never the row's (a tap plays). -->
-    <!-- Wide enough for the wand plus the download's widest state (its
-         progress bar is w-28 on its own), so nothing ever overlaps the
-         duration column; the header spacer below matches this width. -->
+    <TrackFormat data-column="format" class="source-format" :formats="location?.formats || []" />
+    <!-- A reserved download cell keeps checks, downloads and progress aligned. -->
     <div
-      class="flex w-40 shrink-0 items-center justify-end gap-2"
+      data-track-download-cell data-column="download"
+      class="source-download flex w-28 shrink-0 items-center max-sm:w-auto"
       @click.stop
       @dblclick.stop
     >
-      <SimilarButton :artist="firstArtist" :title="song.name" filled />
-      <DownloadState :song="song" />
+      <DownloadState :song="song" :downloaded="location?.downloaded" round />
     </div>
+    <LocationBadges data-column="locations" class="source-locations" :location="location" :context-kind="locationContext" />
+    <div data-column="heart" class="source-heart"><slot name="heart" :song="song"><LocalLike :song="song" /></slot></div>
+    <div data-column="menu" class="source-actions"><slot name="actions" :song="song"><SourceSongMenu :song="song" /></slot></div>
   </div>
 </template>
 
 <script setup>
+import { rowPlaybackClick } from '/src/lib/rowPlayback'
+import ArtistCredits from '/src/components/library/ArtistCredits.vue'
+import LocalLike from './LocalLike.vue'
 // One song as a row that downloads, then plays: minimal like a search
 // result (SongRow), with the play affordances TrackList has on an album page
 // once the song is in the library (the number turns into a play button on
@@ -152,7 +155,10 @@ import CoverArt from '../ui/CoverArt.vue'
 import EqBars from '../ui/EqBars.vue'
 import ExplicitBadge from '../ui/ExplicitBadge.vue'
 import DownloadState from '../search/DownloadState.vue'
-import SimilarButton from '../similar/SimilarButton.vue'
+import SourceSongMenu from './SourceSongMenu.vue'
+import LocationBadges from './LocationBadges.vue'
+import TrackFormat from './TrackFormat.vue'
+import '/src/styles/trackRows.css'
 import { usePlayer } from '/src/model/player'
 import { useSongPlay } from '/src/model/songPlay'
 import { deezerImage } from '/src/lib/deezerImage'
@@ -162,6 +168,8 @@ import { useI18n } from '/src/i18n'
 const props = defineProps({
   // A song from a search/link/top-songs result.
   song: { type: Object, required: true },
+  location: { type: Object, default: null },
+  locationContext: { type: String, default: '' },
   // Its position in the list, shown as the number; `null` hides it.
   index: { type: Number, default: null },
   // The library tracks playing this song starts a queue from (typically the
@@ -186,10 +194,10 @@ const props = defineProps({
   marked: { type: Boolean, default: false },
   // Leaves out the album column (and the album after the artists on a
   // narrow screen) - for a list that is all one album anyway.
-  hideAlbum: { type: Boolean, default: false },
+  hideAlbum: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['toggle'])
+const emit = defineEmits(['toggle', 'contextmenu'])
 
 const { t } = useI18n()
 const player = usePlayer()
@@ -203,15 +211,6 @@ const {
   ensurePlaying,
 } = useSongPlay(props)
 
-const artists = computed(
-  () =>
-    (props.song.artists || []).join(', ') ||
-    props.song.artist ||
-    t('common.unknownArtist')
-)
-const firstArtist = computed(
-  () => (props.song.artists || [])[0] || props.song.artist || ''
-)
 // A Deezer cover at its medium size, for the 44px thumbnail - display only:
 // the song's own `cover_url` is what its download embeds.
 const cover = computed(() => deezerImage(props.song.cover_url))
@@ -219,7 +218,7 @@ const cover = computed(() => deezerImage(props.song.cover_url))
 const highlighted = computed(() => props.marked || playing.value)
 
 // On a touch screen a tap on the row plays it (a double click can't).
-function onRowClick() {
-  if (window.matchMedia('(pointer: coarse)').matches) toggle()
+function onRowClick(event) {
+  if (rowPlaybackClick(event)) ensurePlaying()
 }
 </script>

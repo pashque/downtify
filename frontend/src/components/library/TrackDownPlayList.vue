@@ -40,6 +40,8 @@
         v-for="(song, i) in songs"
         :key="keyOf(song, i)"
         :song="song"
+        :location="locationFor(song)"
+        :location-context="hideAlbum ? 'album' : ''"
         :index="i"
         :queue="queue"
         :songs="songs"
@@ -49,7 +51,11 @@
         :marked="!!markedKey && keyOf(song, i) === markedKey"
         :hide-album="hideAlbum"
         @toggle="toggleSelected(keyOf(song, i))"
-      />
+        @contextmenu="emit('contextmenu', $event, song)"
+      >
+        <template #heart><slot name="heart" :song="song" /></template>
+        <template #actions><slot name="actions" :song="song"><SourceSongMenu :song="song" /></slot></template>
+      </TrackDownPlay>
     </div>
   </div>
 </template>
@@ -127,8 +133,10 @@ export const TOOLBAR_LAZY = 'lazy'
 //     :toolbar-mode="TOOLBAR_LAZY"
 //   />
 import { computed, ref } from 'vue'
+import { useLibraryLocations } from '/src/model/libraryLocations'
 import { useRouter } from 'vue-router'
 import TrackDownPlay from './TrackDownPlay.vue'
+import SourceSongMenu from './SourceSongMenu.vue'
 import TrackDownPlayHeader from './TrackDownPlayHeader.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiChips from '../ui/UiChips.vue'
@@ -151,10 +159,12 @@ const props = defineProps({
   context: { type: Object, default: null },
   collectionName: { type: String, default: '' },
   markedKey: { type: String, default: '' },
-  hideAlbum: { type: Boolean, default: false },
+  hideAlbum: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['download'])
+const { locationFor } = useLibraryLocations(computed(() => props.songs))
+
+const emit = defineEmits(['download', 'contextmenu'])
 
 const { t } = useI18n()
 const router = useRouter()
@@ -196,7 +206,7 @@ const songKeys = computed(() => props.songs.map((song, i) => keyOf(song, i)))
 // A song not yet in the library - what the "New" chip selects.
 function isNew(song) {
   const artist = (song.artists || [])[0] || song.artist
-  return !library.findTrack(artist, song.name)
+  return !library.findTrack(artist, song.name, song)
 }
 
 const newKeys = computed(() =>

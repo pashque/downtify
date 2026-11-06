@@ -74,17 +74,20 @@ def _now() -> datetime:
 
 
 def split_artists(artist: str) -> list[str]:
-    """The artists in a tag's artist string - the web app's own rule
-    (``frontend/src/lib/library.js``): split on the first of ``;``,
-    `` / `` or ``, `` it contains."""
+    """Legacy semicolon credits only; commas/slashes belong to names."""
 
     text = str(artist or '').strip()
     if not text:
         return []
-    for sep in (';', ' / ', ', '):
-        if sep in text:
-            return [part.strip() for part in text.split(sep) if part.strip()]
-    return [text]
+    return [part.strip() for part in text.split(';') if part.strip()]
+
+
+def _entry_artists(entry: dict[str, Any]) -> list[str]:
+    artists = entry.get('artists')
+    if isinstance(artists, list) and artists:
+        names = [a.get('name') if isinstance(a, dict) else a for a in artists]
+        return [a.strip() for a in names if isinstance(a, str) and a.strip()]
+    return split_artists(entry.get('artist', ''))
 
 
 def _short_hash(text: str) -> str:
@@ -97,7 +100,7 @@ def grouping_keys(row: dict[str, Any]) -> dict[str, str]:
     (album artist + album title, case-insensitive; ``''`` when the track
     has no album) and ``artist_id`` (the album artist)."""
 
-    artists = split_artists(row.get('artist', ''))
+    artists = _entry_artists(row)
     album_artist = str(row.get('album_artist') or '').strip() or (
         artists[0] if artists else ''
     )
@@ -120,7 +123,7 @@ def public_row(entry: dict[str, Any]) -> dict[str, Any]:
         'file': str(entry.get('file') or ''),
         'title': str(entry.get('title') or ''),
         'artist': str(entry.get('artist') or ''),
-        'artists': split_artists(entry.get('artist', '')),
+        'artists': _entry_artists(entry),
         'album': str(entry.get('album') or ''),
         'track_number': int(entry.get('track_number') or 0),
         'year': str(entry.get('year') or ''),

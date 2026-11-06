@@ -212,19 +212,21 @@ def test_query_string_is_sent_url_safe(monkeypatch):
 # ── names as the disk keeps them ───────────────────────────────────────
 
 
-def test_a_name_the_disk_shortened_still_finds_the_artist(monkeypatch):
-    """A track with no artist tag is named after its file: 'ACDC'."""
+def test_a_sanitized_name_is_not_evidence_of_artist_identity(monkeypatch):
+    """A lossy filename cannot attest that ACDC is AC/DC."""
 
     _patch_get(monkeypatch, [_artist_row('AC/DC', '711MCceyCBcFnzjGY4Q7Un')])
-    assert spotify.search_artist_by_name('ACDC') == {
+    assert spotify.search_artist_by_name('ACDC') is None
+    assert spotify.search_artist_by_name('ac/dc') == {
         'id': '711MCceyCBcFnzjGY4Q7Un',
         'name': 'AC/DC',
     }
 
 
-def test_the_spotify_spelling_finds_a_shortened_row(monkeypatch):
+def test_punctuation_name_does_not_match_a_shortened_row(monkeypatch):
     _patch_get(monkeypatch, [_artist_row('ACDC', 'x')])
-    assert spotify.search_artist_by_name('AC/DC')['id'] == 'x'
+    assert spotify.search_artist_by_name('AC/DC') is None
+    assert spotify.search_artist_by_name('acdc')['id'] == 'x'
 
 
 def test_a_different_artist_is_still_not_matched(monkeypatch):
@@ -232,11 +234,11 @@ def test_a_different_artist_is_still_not_matched(monkeypatch):
     assert spotify.search_artist_by_name('ACDC') is None
 
 
-@pytest.mark.parametrize('name', ['???', '///', '...'])
-def test_a_name_with_nothing_left_makes_no_request(monkeypatch, name):
-    def boom(*a, **k):
-        raise AssertionError('no request expected')
-
-    monkeypatch.setattr(spotify.httpx, 'get', boom)
-    monkeypatch.setattr(spotify, '_fetch_embed_json', boom)
-    assert spotify.search_artist_by_name(name) is None
+@pytest.mark.parametrize('name', ['???', '///', '...', '!!!', '+++'])
+def test_symbol_only_names_remain_literal_artist_identities(monkeypatch, name):
+    seen = []
+    _patch_get(monkeypatch, [_artist_row(name, 'A' * 22)], seen)
+    assert spotify.search_artist_by_name(name) == {'id': 'A' * 22, 'name': name}
+    assert len(seen) == 1
+    variables = json.loads(seen[0][1]['params']['variables'])
+    assert variables['query'] == name

@@ -16,7 +16,8 @@
     <div
       v-else-if="lines.length"
       ref="scroller"
-      class="relative flex-1 overflow-y-auto overscroll-contain px-2 py-[min(30vh,9rem)] [mask-image:linear-gradient(transparent,#000_18%,#000_82%,transparent)] [scrollbar-width:none]"
+      data-lyrics-scroll
+      class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-[min(30vh,9rem)] [mask-image:linear-gradient(transparent,#000_18%,#000_82%,transparent)] [scrollbar-width:none]"
       @wheel.passive="userScrolled"
       @touchmove.passive="userScrolled"
     >
@@ -117,6 +118,17 @@ function userScrolled() {
 watch(active, async (index) => {
   if (index < 0 || Date.now() < manualUntil) return
   await nextTick()
-  lineEls.value[index]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  // scrollIntoView walks every scrollable ancestor, including overflow:hidden
+  // grid/overlay containers. Move only our viewport so the header/footer stay put.
+  const viewport = scroller.value
+  const line = lineEls.value[index]
+  if (!viewport || !line) return
+  const top = viewport.scrollTop + line.getBoundingClientRect().top -
+    viewport.getBoundingClientRect().top - viewport.clientHeight / 2 +
+    line.getBoundingClientRect().height / 2
+  viewport.scrollTo({
+    top: Math.max(0, Math.min(top, viewport.scrollHeight - viewport.clientHeight)),
+    behavior: 'smooth',
+  })
 })
 </script>

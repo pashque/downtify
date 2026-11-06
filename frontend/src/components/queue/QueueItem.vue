@@ -1,6 +1,11 @@
 <template>
   <article
     class="rounded-[14px] border transition-colors"
+    :tabindex="canPlay ? 0 : undefined"
+    :aria-label="canPlay ? t('actions.playItem', { name: song.name }) : undefined"
+    @click="onRowClick"
+    @keydown.enter.self.prevent="play"
+    @keydown.space.self.prevent="play"
     :class="[
       item.state === 'failed'
         ? 'border-danger/25 bg-danger/6'
@@ -32,8 +37,7 @@
           />
         </div>
         <p class="truncate text-[13px] text-muted">
-          {{ artists
-          }}<span v-if="song.album_name"> · {{ song.album_name }}</span>
+          <ArtistCredits :artists="song.artists" :artist="song.artist || t('common.unknownArtist')" /><template v-if="song.album_name"> · <RouterLink v-if="albumDestination" :to="albumDestination" data-queue-album class="hover:text-fg hover:underline" @click.stop @dblclick.stop>{{ song.album_name }}</RouterLink><span v-else>{{ song.album_name }}</span></template>
         </p>
         <template v-if="item.state === 'active'">
           <div class="mt-2 flex items-center gap-3">
@@ -143,7 +147,11 @@
 </template>
 
 <script setup>
+import ArtistCredits from '/src/components/library/ArtistCredits.vue'
 import { computed, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+import { useSongPlay } from '/src/model/songPlay'
+import { playerAlbumRoute } from '/src/lib/playerNavigation'
 import AppIcon from '../ui/AppIcon.vue'
 import CoverArt from '../ui/CoverArt.vue'
 import SourceBadge from '../ui/SourceBadge.vue'
@@ -172,15 +180,41 @@ const override = ref('')
 const overrideError = ref('')
 
 const song = computed(() => props.item.song)
-const artists = computed(
-  () =>
-    (song.value.artists || []).join(', ') ||
-    song.value.artist ||
-    t('common.unknownArtist')
-)
+const songPlayback = useSongPlay({ get song() { return song.value } })
+const completedFile = computed(() => props.item.state === 'done' && props.item.filename)
+const canPlay = computed(() => !!completedFile.value || songPlayback.playable.value)
+const albumDestination = computed(() => {
+  const track = library.tracksByFile.value.get(props.item.filename)
+  const route = playerAlbumRoute(track || {
+    album: song.value.album_name,
+    albumArtist: song.value.album_artist || song.value.albumArtist,
+    artists: song.value.artists,
+    artist: song.value.artist,
+  })
+  if (route && library.findAlbum(route.query.artist, route.query.title)) return route
+  // Only an album URL is an album source: a job's ordinary URL is a track.
+  const url = String(song.value.album_url || '')
+  if (/^https:\/\/(?:open\.spotify\.com\/album\/|(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?album\/|music\.youtube\.com\/(?:browse\/|playlist\?list=))/.test(url)) {
+    return { name: 'Link', query: { url } }
+  }
+  // AlbumView discovers missing local/source metadata on navigation, not render.
+  return route
+})
+
+function onRowClick(event) {
+  if (event.defaultPrevented || event.button > 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  if (event.target?.closest('a, button, input, select, textarea, label, form, [role="button"], [contenteditable="true"]')) return
+  if (window.getSelection()?.toString()) return
+  play()
+}
 
 function play() {
-  const file = props.item.filename
+  if (!canPlay.value) return
+  if (!completedFile.value) {
+    songPlayback.ensurePlaying()
+    return
+  }
+  const file = completedFile.value
   const track = library.tracksByFile.value.get(file) || normalizeTrack(file)
   actions.play([track], 0, null)
 }

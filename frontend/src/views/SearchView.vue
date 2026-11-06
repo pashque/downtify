@@ -95,10 +95,12 @@
             {{ t('search.songs') }}
           </h2>
           <div class="-mx-3 flex flex-col">
+            <TrackDownPlayHeader hide-album />
             <SongRow
               v-for="(song, i) in visibleSongs"
               :key="song.song_id || song.url"
               :song="song"
+              :location="locationFor(song)"
               :index="i"
               :songs="visibleSongs"
             />
@@ -127,7 +129,7 @@
             {{ t('search.albums') }}
           </h2>
           <div
-            class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+            class="tile-grid"
           >
             <ReleaseCard
               v-for="album in visibleAlbums"
@@ -148,7 +150,7 @@
             {{ t('search.artists') }}
           </h2>
           <div
-            class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+            class="tile-grid"
           >
             <ReleaseCard
               v-for="artist in visibleArtists"
@@ -164,6 +166,7 @@
 </template>
 
 <script setup>
+import { useLibraryLocations } from '/src/model/libraryLocations'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLocalStorage } from '@vueuse/core'
@@ -174,6 +177,7 @@ import UiEmpty from '/src/components/ui/UiEmpty.vue'
 import UiSkeleton from '/src/components/ui/UiSkeleton.vue'
 import PageHeader from '/src/components/library/PageHeader.vue'
 import ReleaseCard from '/src/components/search/ReleaseCard.vue'
+import TrackDownPlayHeader from '/src/components/library/TrackDownPlayHeader.vue'
 import SongRow from '/src/components/search/SongRow.vue'
 import { useSearch } from '/src/model/search'
 import { useLibrary } from '/src/model/library'
@@ -183,6 +187,7 @@ const { t } = useI18n()
 const route = useRoute()
 const search = useSearch()
 const library = useLibrary()
+const { locationFor } = useLibraryLocations(computed(() => search.songs.value))
 const filter = ref('all')
 const recent = useLocalStorage('downtify-recent-searches', [])
 

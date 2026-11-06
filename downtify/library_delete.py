@@ -628,10 +628,9 @@ def _delete_imported_playlist(
     # With organize-by-artist or -album on, tracks live in artist/album
     # folders, not a per-playlist folder — and a same-named album folder
     # must not be swept as if it were the playlist's.
-    organize = bool(
-        settings.get('organize_by_artist', False)
-        or settings.get('organize_by_album', False)
-    )
+    from downtify.folder_settings import settings_use_shared_playlists
+
+    organize = settings_use_shared_playlists(settings)
     safe = sanitize_playlist_name(pl_name)
     logger.info(
         'Deleting playlist {!r} (folder={!r}, organized={})',

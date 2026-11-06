@@ -1,0 +1,32 @@
+[
+  {
+    "file": "My Playlist #1/Loyle Carner, Jordan Rakei - Ottolenghi.mp3",
+    "title": "Ottolenghi",
+    "artist": "Loyle Carner; Jordan Rakei",
+    "album": "Not Waving, But Drowning",
+    "album_artist": "Loyle Carner",
+    "track_number": 4,
+    "year": "2019",
+    "duration": 200.02
+  },
+  {
+    "file": "My Playlist #1/Loyle Carner, Jorja Smith - Loose Ends.mp3",
+    "title": "Loose Ends",
+    "artist": "Loyle Carner; Jorja Smith",
+    "album": "Not Waving, But Drowning",
+    "album_artist": "Loyle Carner",
+    "track_number": 9,
+    "year": "2019",
+    "duration": 257.69
+  },
+  {
+    "file": "My Playlist #1/Loyle Carner, Sampha - Desoleil (Brilliant Corners).mp3",
+    "title": "Desoleil (Brilliant Corners)",
+    "artist": "Loyle Carner; Sampha",
+    "album": "Not Waving, But Drowning",
+    "album_artist": "Loyle Carner",
+    "track_number": 8,
+    "year": "2019",
+    "duration": 220.45
+  }
+]

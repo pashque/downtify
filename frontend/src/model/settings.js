@@ -4,6 +4,7 @@ import API from '/src/model/api'
 import { useAuth } from '/src/model/auth'
 import { currentLocale } from '/src/i18n'
 import { needsLanguageSync, splitUiLanguage } from '/src/lib/uiLanguage'
+import { defaultOutput } from '/src/lib/fileTemplates'
 
 const settings = ref({
   audio_providers: ['youtube-music'],
@@ -57,6 +58,8 @@ const settings = ref({
     client_name: 'Downtify',
     api_version: '1.16.1',
   },
+  folder_structure: null,
+  playlist_use_library: true,
   organize_by_artist: true,
   cache_cover_art: false,
   organize_by_album: true,
@@ -70,6 +73,22 @@ const settings = ref({
   search_albums: true,
   mini_player_enabled: true,
 })
+
+// Only direct edits to the switches choose a new template. Server loads,
+// save responses and Discard replace the object and must preserve its template.
+watch(
+  () => [
+    settings.value,
+    settings.value.folder_structure,
+    settings.value.playlist_use_library,
+  ],
+  ([current], [previous]) => {
+    if (current === previous && typeof current.folder_structure === 'boolean') {
+      current.output = defaultOutput(current)
+    }
+  },
+  { flush: 'sync' }
+)
 
 const MIN_PARALLEL_DOWNLOADS = 1
 const MAX_PARALLEL_DOWNLOADS = 30
@@ -270,7 +289,12 @@ async function saveSettings() {
   saving.value = true
   saveErrorText.value = ''
   try {
-    const res = await API.setSettings(settings.value)
+    const payload = { ...settings.value }
+    if (typeof payload.folder_structure === 'boolean') {
+      payload.organize_by_artist = false
+      payload.organize_by_album = false
+    }
+    const res = await API.setSettings(payload)
     const { uiLanguage: known, rest } = splitUiLanguage(res.data)
     uiLanguage.value = known
     settings.value = {

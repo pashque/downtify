@@ -299,12 +299,14 @@ export function useDownloadManager() {
    */
   async function fromSongs(
     list,
-    { playlistUrl = '', playlistName = '', coverUrl = '', m3u } = {}
+    { playlistUrl = '', playlistName = '', coverUrl = '', m3u, downloadMode = 'missing', destination = '', audioFormat } = {}
   ) {
     const hints = playlistUrl ? { downtify_playlist_url: playlistUrl } : {}
     const songs = list.map((song, i) => ({
       ...song,
       ...hints,
+      ...(destination === 'album' ? { downtify_destination: 'album' } : {}),
+      downtify_download_mode: downloadMode,
       downtify_track_order: song.downtify_track_order ?? i,
     }))
     batchQueueChanges(() => {
@@ -313,6 +315,7 @@ export function useDownloadManager() {
     ensureQueuePoll()
     await API.downloadBatch({
       songs,
+      ...(audioFormat ? { audioFormat } : {}),
       playlist_url: playlistUrl,
       playlist_name: playlistName,
       cover_url: coverUrl,

@@ -1,0 +1,411 @@
+[
+  {
+    "local": {
+      "artist": "1-800 GIRLS",
+      "album": "90%",
+      "distinct_local_tracks": 1,
+      "rows": [
+        {
+          "filename": "My Playlist #1/1-800 GIRLS - 90%.mp3",
+          "title": "90%",
+          "artist": "1-800 GIRLS",
+          "album": "90%",
+          "album_artist": "1-800 GIRLS",
+          "track_number": 1,
+          "year": "2023",
+          "duration": 352.03
+        }
+      ]
+    },
+    "sources": [
+      {
+        "album": {
+          "id": "2YjniQbChT8RQfcfojCLs2",
+          "name": "90%",
+          "artists": [
+            "1-800 GIRLS"
+          ],
+          "year": "2023",
+          "cover_url": "https://i.scdn.co/image/ab67616d0000b2730ffd03855a4a4d5a4d18c6e0",
+          "type": "SINGLE"
+        },
+        "tracks": [
+          {
+            "song_id": "2B1uWjnmyShWKFzzZFL0c9",
+            "name": "90%",
+            "artists": [
+              "1-800 GIRLS"
+            ],
+            "artist": "1-800 GIRLS",
+            "album_name": "90%",
+            "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b2730ffd03855a4a4d5a4d18c6e0",
+            "duration": 352,
+            "url": "https://open.spotify.com/track/2B1uWjnmyShWKFzzZFL0c9",
+            "explicit": false,
+            "release_date": "2023-01-13",
+            "year": "2023",
+            "source": "spotify",
+            "track_number": 1,
+            "album_artist": "1-800 GIRLS",
+            "album_track_total": 1,
+            "preview_url": "https://p.scdn.co/mp3-preview/df3eeec12db6dcf9dd3a419e89f2b4f5a36eab40"
+          }
+        ]
+      },
+      {
+        "album": {
+          "id": "2mIoJMv8DGRAeS09wFVDxi",
+          "name": "90%",
+          "artists": [
+            "1-800 GIRLS"
+          ],
+          "year": "2023",
+          "cover_url": "https://i.scdn.co/image/ab67616d0000b273f1c5e13631734aea81d9bfec",
+          "type": "SINGLE"
+        },
+        "tracks": [
+          {
+            "song_id": "3t4xzxHG2RgzVjn4kQwqf3",
+            "name": "90%",
+            "artists": [
+              "1-800 GIRLS"
+            ],
+            "artist": "1-800 GIRLS",
+            "album_name": "90%",
+            "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273f1c5e13631734aea81d9bfec",
+            "duration": 352,
+            "url": "https://open.spotify.com/track/3t4xzxHG2RgzVjn4kQwqf3",
+            "explicit": false,
+            "release_date": "2023-01-27",
+            "year": "2023",
+            "source": "spotify",
+            "track_number": 1,
+            "album_artist": "1-800 GIRLS",
+            "album_track_total": 2,
+            "preview_url": "https://p.scdn.co/mp3-preview/df3eeec12db6dcf9dd3a419e89f2b4f5a36eab40"
+          },
+          {
+            "song_id": "7kAfS3eOPopkq4xzmFigu8",
+            "name": "Gd 2 Me",
+            "artists": [
+              "1-800 GIRLS"
+            ],
+            "artist": "1-800 GIRLS",
+            "album_name": "90%",
+            "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273f1c5e13631734aea81d9bfec",
+            "duration": 301,
+            "url": "https://open.spotify.com/track/7kAfS3eOPopkq4xzmFigu8",
+            "explicit": false,
+            "release_date": "2023-01-27",
+            "year": "2023",
+            "source": "spotify",
+            "track_number": 2,
+            "album_artist": "1-800 GIRLS",
+            "album_track_total": 2,
+            "preview_url": "https://p.scdn.co/mp3-preview/d5ea0b71be3aa4c1841e8a7d6a31dfff14bc1a27"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "local": {
+      "artist": "2nd Exit",
+      "album": "2nd Exit",
+      "distinct_local_tracks": 2,
+      "rows": [
+        {
+          "filename": "My Playlist #1/2nd Exit, Alfa Mist, Lester Duval - Dawn's Insight.mp3",
+          "title": "Dawn's Insight",
+          "artist": "2nd Exit; Alfa Mist; Lester Duval",
+          "album": "2nd Exit",
+          "album_artist": "2nd Exit",
+          "track_number": 7,
+          "year": "2016",
+          "duration": 233.78
+        },
+        {
+          "filename": "My Playlist #1/2nd Exit, Alfa Mist, Lester Duval - If You Wouldn't Mind.mp3",
+          "title": "If You Wouldn't Mind",
+          "artist": "2nd Exit; Alfa Mist; Lester Duval",
+          "album": "2nd Exit",
+          "album_artist": "2nd Exit",
+          "track_number": 4,
+          "year": "2016",
+          "duration": 238.52
+        }
+      ]
+    },
+    "sources": [
+      {
+        "album": {
+          "id": "7DYnI0CZgasN25teMmX9O9",
+          "name": "2nd Exit",
+          "artists": [
+            "2nd Exit",
+            "Alfa Mist",
+            "Lester Duval"
+          ],
+          "year": "2016",
+          "cover_url": "https://i.scdn.co/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+          "type": "ALBUM"
+        },
+        "tracks": [
+          {
+            "song_id": "0y1x810fdYuUKr1lJrIOuL",
+            "name": "Intro - 2 Bars",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 109,
+            "url": "https://open.spotify.com/track/0y1x810fdYuUKr1lJrIOuL",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 1,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/fd3e43dd833f63b16815db2865db8678e367a1d0"
+          },
+          {
+            "song_id": "0Ka6es2qNkFvKVcib28OtI",
+            "name": "Say It Is",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 194,
+            "url": "https://open.spotify.com/track/0Ka6es2qNkFvKVcib28OtI",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 2,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/41892eafa8f598aa019c39a868191759e03c42a7"
+          },
+          {
+            "song_id": "0YTYfDCZ2gywxMqqC2QQQK",
+            "name": "Passing Through",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 210,
+            "url": "https://open.spotify.com/track/0YTYfDCZ2gywxMqqC2QQQK",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 3,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/4de7588fef18df88bb81a93684e920b964e1f5ac"
+          },
+          {
+            "song_id": "749mPYdePHdjsfucRBz1Ow",
+            "name": "If You Wouldn't Mind",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 238,
+            "url": "https://open.spotify.com/track/749mPYdePHdjsfucRBz1Ow",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 4,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/56026d76a73144902b1c9305e9d25c095bf2ab16"
+          },
+          {
+            "song_id": "0Wk1F7rr43ANfiyAgHZxOs",
+            "name": "It's Alright",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 176,
+            "url": "https://open.spotify.com/track/0Wk1F7rr43ANfiyAgHZxOs",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 5,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/1da4446e11d38e72b0c21f4fb90a36b2f58c35d5"
+          },
+          {
+            "song_id": "4TswzQQUaTmVwUtucHxzjM",
+            "name": "Decent Audio",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 204,
+            "url": "https://open.spotify.com/track/4TswzQQUaTmVwUtucHxzjM",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 6,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/9fc8072a0eaed7f9e7d90c07b83b288ccca0dd67"
+          },
+          {
+            "song_id": "1P08Gk1VpDIf6x1gvIobE2",
+            "name": "Dawn's Insight",
+            "artists": [
+              "2nd Exit",
+              "Alfa Mist",
+              "Lester Duval"
+            ],
+            "artist": "2nd Exit, Alfa Mist, Lester Duval",
+            "album_name": "2nd Exit",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273e8ff6492f3635fc139dc4531",
+            "duration": 233,
+            "url": "https://open.spotify.com/track/1P08Gk1VpDIf6x1gvIobE2",
+            "explicit": false,
+            "release_date": "2016-09-13",
+            "year": "2016",
+            "source": "spotify",
+            "track_number": 7,
+            "album_artist": "2nd Exit",
+            "album_track_total": 7,
+            "preview_url": "https://p.scdn.co/mp3-preview/4cbbbe44f2acea40b10850399e3f97f23a728f26"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "local": {
+      "artist": "420",
+      "album": "420 Sampler",
+      "distinct_local_tracks": 1,
+      "rows": [
+        {
+          "filename": "My Playlist #1/420, Galcher Lustwerk - Untitled 5.mp3",
+          "title": "Untitled 5",
+          "artist": "420; Galcher Lustwerk",
+          "album": "420 Sampler",
+          "album_artist": "420",
+          "track_number": 3,
+          "year": "2020",
+          "duration": 260.5
+        }
+      ]
+    },
+    "sources": [
+      {
+        "album": {
+          "id": "7M6WHlUG3OBQvzDwws9c5W",
+          "name": "420 Sampler",
+          "artists": [
+            "420",
+            "Galcher Lustwerk"
+          ],
+          "year": "2020",
+          "cover_url": "https://i.scdn.co/image/ab67616d0000b273c5628ce081dc43f71f6a9e9b",
+          "type": "EP"
+        },
+        "tracks": [
+          {
+            "song_id": "1ICImk51ehekbbs2hUHItE",
+            "name": "Untitled 6",
+            "artists": [
+              "420",
+              "Galcher Lustwerk"
+            ],
+            "artist": "420, Galcher Lustwerk",
+            "album_name": "420 Sampler",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273c5628ce081dc43f71f6a9e9b",
+            "duration": 260,
+            "url": "https://open.spotify.com/track/1ICImk51ehekbbs2hUHItE",
+            "explicit": false,
+            "release_date": "2020-08-28",
+            "year": "2020",
+            "source": "spotify",
+            "track_number": 1,
+            "album_artist": "420",
+            "album_track_total": 3,
+            "preview_url": "https://p.scdn.co/mp3-preview/eb72605f2189ec6d4328f081f2671354a7139c90"
+          },
+          {
+            "song_id": "1LA7WS1CKpP9ua4gRaAQMj",
+            "name": "Untitled 4",
+            "artists": [
+              "420",
+              "Galcher Lustwerk"
+            ],
+            "artist": "420, Galcher Lustwerk",
+            "album_name": "420 Sampler",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273c5628ce081dc43f71f6a9e9b",
+            "duration": 260,
+            "url": "https://open.spotify.com/track/1LA7WS1CKpP9ua4gRaAQMj",
+            "explicit": false,
+            "release_date": "2020-08-28",
+            "year": "2020",
+            "source": "spotify",
+            "track_number": 2,
+            "album_artist": "420",
+            "album_track_total": 3,
+            "preview_url": "https://p.scdn.co/mp3-preview/19a68c4aa322e6e1988959ac3b490c6781d43bdf"
+          },
+          {
+            "song_id": "65mYMqSLZeu3FSp33Tc4Ck",
+            "name": "Untitled 5",
+            "artists": [
+              "420",
+              "Galcher Lustwerk"
+            ],
+            "artist": "420, Galcher Lustwerk",
+            "album_name": "420 Sampler",
+            "cover_url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273c5628ce081dc43f71f6a9e9b",
+            "duration": 260,
+            "url": "https://open.spotify.com/track/65mYMqSLZeu3FSp33Tc4Ck",
+            "explicit": false,
+            "release_date": "2020-08-28",
+            "year": "2020",
+            "source": "spotify",
+            "track_number": 3,
+            "album_artist": "420",
+            "album_track_total": 3,
+            "preview_url": "https://p.scdn.co/mp3-preview/cb6322051d94ffbe8ac800f6bb93e6493b88fd36"
+          }
+        ]
+      }
+    ]
+  }
+]

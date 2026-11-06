@@ -51,7 +51,7 @@
         >
           {{ t('playlists.create') }}
         </UiButton>
-        <UiSelect
+        <EditionMenu
           v-if="tab !== 'tracks'"
           v-model="sortKey"
           :options="sortOptions"
@@ -72,7 +72,7 @@
     <!-- Loading -->
     <div
       v-if="!catalogReady && library.loading.value"
-      class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6"
+      class="tile-grid"
     >
       <div v-for="n in 12" :key="n" class="flex flex-col gap-2.5">
         <UiSkeleton class="aspect-square !rounded-cover" />
@@ -269,7 +269,7 @@ import UiChips from '/src/components/ui/UiChips.vue'
 import UiEmpty from '/src/components/ui/UiEmpty.vue'
 import UiMenu from '/src/components/ui/UiMenu.vue'
 import UiSegmented from '/src/components/ui/UiSegmented.vue'
-import UiSelect from '/src/components/ui/UiSelect.vue'
+import EditionMenu from '/src/components/library/EditionMenu.vue'
 import UiSkeleton from '/src/components/ui/UiSkeleton.vue'
 import UiTabs from '/src/components/ui/UiTabs.vue'
 import MediaRow from '/src/components/library/MediaRow.vue'
@@ -547,7 +547,6 @@ const selectionPlan = computed(() => selectionChanges(selectedTracks.value))
 
 // Admins: hide an album or artist from users, or show it again.
 function adminMenu(item) {
-  if (tab.value === 'albums') return visibility.albumMenu(item)
   if (tab.value === 'artists') return visibility.artistMenu(item)
   return []
 }
@@ -565,6 +564,7 @@ function tileProps(item) {
     return {
       to: { name: 'Album', query: { artist: item.artist, title: item.title } },
       title: item.title,
+      releaseType: item.release_type || '',
       subtitle: [item.artist, item.year].filter(Boolean).join(' · '),
       cover: item.cover,
       name: item.title,

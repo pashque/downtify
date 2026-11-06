@@ -17,7 +17,7 @@
         </div>
       </div>
       <div
-        class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        class="tile-grid"
       >
         <div v-for="n in 6" :key="n" class="flex flex-col gap-2.5">
           <UiSkeleton class="aspect-square w-full !rounded-cover" />
@@ -64,7 +64,7 @@
       />
       <div
         v-else
-        class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        class="tile-grid"
       >
         <ChartTile
           v-for="(item, i) in activeReleases"

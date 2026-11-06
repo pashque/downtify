@@ -8,11 +8,13 @@
 // evaluates before init - the shipped app then dies on load with
 // `TypeError: e is not a function` in the vendor chunk.
 import API from '/src/model/api'
+import { providerSongKey, songKey } from '/src/lib/library'
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/
 
 export function songArtist(song) {
-  return String((song?.artists || [])[0] || song?.artist || '').trim()
+  const first = song?.artists?.[0]
+  return String((typeof first === 'string' ? first : first?.name) || song?.artist || '').trim()
 }
 
 export function songTitle(song) {
@@ -20,7 +22,9 @@ export function songTitle(song) {
 }
 
 export function rowKey(song) {
-  return `${songArtist(song)}|${songTitle(song)}`.toLowerCase()
+  const id = providerSongKey(song)
+  return id ? `id:${id}`
+    : `song:${songKey(songArtist(song), songTitle(song))}`
 }
 
 /** This song's YouTube video id when it already carries one. */

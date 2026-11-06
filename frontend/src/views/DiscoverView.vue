@@ -20,7 +20,7 @@
 
     <div
       v-if="!library.loaded.value || (discover.loading.value && !items.length)"
-      class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+      class="tile-grid"
       aria-busy="true"
     >
       <div v-for="n in 12" :key="n" class="flex flex-col gap-2.5">
@@ -145,6 +145,7 @@
             :to="collectionRoute(item)"
             :title="item.name"
             :subtitle="shelf.subtitle(item)"
+            :artist="item.artist"
             :cover="item.cover_url"
             :name="item.name"
             :icon="shelf.icon"
@@ -296,7 +297,7 @@ const likes = useLikes()
 const discover = useDiscover()
 
 const GRID =
-  'grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6'
+  'tile-grid'
 // Artists shown before "Show all": two rows on a wide screen.
 const ARTISTS_SHOWN = 12
 

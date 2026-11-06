@@ -166,7 +166,7 @@ def test_url_resolve_spotify_artist_lists_the_releases(monkeypatch):
     monkeypatch.setattr(
         api.spotify,
         'artist_page_from_id',
-        lambda artist_id: (
+        lambda artist_id, metadata=None: (
             'Test Artist',
             'https://example.test/cover.jpg',
             releases,

@@ -28,6 +28,7 @@ const rows = [
   {
     file: 'Glass Harbor/Kenji Aoki - Harbor Lights.flac',
     title: 'Harbor Lights',
+    artists: ['Kenji Aoki', 'Mira Kovač'],
     artist: 'Kenji Aoki, Mira Kovač',
     album: 'Glass Harbor',
     album_artist: 'Kenji Aoki',
@@ -297,17 +298,18 @@ describe('sortItems and filterItems', () => {
 })
 
 describe('songKey', () => {
-  it('ignores featured artists, remasters and punctuation', () => {
+  it('keeps title versions and punctuation while using the structured lead artist', () => {
     expect(
-      songKey('Kenji Aoki, Mira Kovač', 'Harbor Lights (Remastered)')
-    ).toBe(songKey('kenji aoki', 'Harbor  Lights'))
-    expect(songKey('Ana Luz', 'Blue Hour feat. Someone')).toBe(
+      songKey(['Kenji Aoki', 'Mira Kovač'], 'Harbor Lights (Remastered)')
+    ).not.toBe(songKey('kenji aoki', 'Harbor  Lights'))
+    expect(songKey(['Kenji Aoki', 'Mira Kovač'], 'Harbor  Lights')).toBe(songKey('kenji aoki', 'Harbor Lights'))
+    expect(songKey('Ana Luz', 'Blue Hour feat. Someone')).not.toBe(
       songKey('Ana Luz', 'Blue Hour')
     )
-    expect(songKey('Ana Luz', 'Blue Hour (with Someone)')).toBe(
+    expect(songKey('Ana Luz', 'Blue Hour (with Someone)')).not.toBe(
       songKey('Ana Luz', 'Blue Hour')
     )
-    expect(songKey('Ana Luz', 'Blue Hour - 2022 Remaster')).toBe(
+    expect(songKey('Ana Luz', 'Blue Hour - 2022 Remaster')).not.toBe(
       songKey('Ana Luz', 'Blue Hour')
     )
   })
@@ -337,10 +339,11 @@ describe('indexTracksBySong', () => {
     title: 'Undertow',
   }
 
-  it('finds the track behind a song by the same loose key as songKey', () => {
+  it('finds exact text identity without aliasing a remastered title', () => {
     const index = indexTracksBySong([a, c])
-    expect(index.get(songKey('ana luz', 'Blue Hour (Remastered)'))).toBe(a)
-    expect(index.get(songKey('Kenji Aoki, Someone', 'Undertow'))).toBe(c)
+    expect(index.get(songKey('ana luz', 'Blue Hour'))).toBe(a)
+    expect(index.get(songKey('ana luz', 'Blue Hour (Remastered)'))).toBeUndefined()
+    expect(index.get(songKey('Kenji Aoki; Someone', 'Undertow'))).toBe(c)
   })
 
   it('keeps the first track when two share a key', () => {

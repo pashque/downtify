@@ -248,6 +248,7 @@ def test_process_batch_writes_m3u_under_explicit_playlist_name(monkeypatch):
         *,
         playlist_subdir=None,
         slskd_dir=None,
+        preserve_existing=False,
     ):
         written['playlist_name'] = playlist_name
         written['playlist_subdir'] = playlist_subdir

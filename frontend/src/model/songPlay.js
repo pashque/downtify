@@ -1,3 +1,4 @@
+import { findSongTrack, songIdentityFields } from '/src/lib/library'
 // Playing one song from a list of songs that may or may not be downloaded
 // yet - a link's album or playlist, an artist's top songs. The whole list
 // goes to the player as one queue: downloaded songs play from the
@@ -25,9 +26,10 @@ import { useI18n } from '/src/i18n'
 
 /** The player track behind a song: the library's, else an unstored one. */
 export function songToPlayerTrack(song, findTrack) {
-  const found = findTrack(songArtist(song), songTitle(song))
+  const found = findTrack(songArtist(song), songTitle(song), song)
   if (found) return found
   return {
+    ...songIdentityFields(song),
     file: '',
     stream: true,
     video_id: directVideoId(song),
@@ -77,9 +79,9 @@ export function useSongStarter() {
       )
       return
     }
-    const track = library.findTrack(songArtist(song), songTitle(song))
+    const track = library.findTrack(songArtist(song), songTitle(song), song)
     if (track) {
-      const index = (queue || []).findIndex((item) => item.file === track.file)
+      const index = queueIndex(queue, track)
       if (index < 0) actions.play([track], 0, context)
       else actions.play(queue, index, context)
       return
@@ -108,7 +110,7 @@ export function useSongPlay(props) {
   // The library track behind the song once it's downloaded - the library
   // refreshes itself shortly after a download finishes, and this follows.
   const track = computed(() =>
-    library.findTrack(songArtist(props.song), songTitle(props.song))
+    library.findTrack(songArtist(props.song), songTitle(props.song), props.song)
   )
   const streaming = computed(() => isStreamingSong(props.song))
   const isCurrent = computed(
@@ -140,7 +142,7 @@ export function useSongPlay(props) {
   function play() {
     if (!track.value) return
     const queue = props.queue || []
-    const start = queue.findIndex((item) => item.file === track.value.file)
+    const start = queueIndex(queue, track.value)
     if (start < 0) actions.play([track.value], 0, props.context)
     else actions.play(queue, start, props.context)
   }
@@ -179,4 +181,15 @@ export function useSongPlay(props) {
     toggle,
     ensurePlaying,
   }
+}
+
+/** Where `track` sits in `queue`: the same file, or else another copy of
+ * the same song (an album plays one copy of each). */
+function queueIndex(queue, track) {
+  const list = queue || []
+  const exact = track.file ? list.findIndex((item) => item.file === track.file) : -1
+  if (exact >= 0) return exact
+  const found = findSongTrack(list.filter(item => item.file && !item.stream),
+    track.artists?.length ? track.artists : track.artist, track.title, track)
+  return found ? list.indexOf(found) : -1
 }

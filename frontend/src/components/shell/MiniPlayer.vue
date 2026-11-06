@@ -2,98 +2,89 @@
   <Transition name="now-playing">
     <div
       v-if="track && !nowPlaying.isOpen.value"
-      class="relative flex h-16 items-center gap-3 overflow-hidden rounded-[16px] border border-line-3 bg-glass pr-2 pl-2 shadow-float backdrop-blur-xl md:h-[76px] md:gap-5 md:rounded-[18px] md:pr-5 md:pl-3"
+      data-mini-bar
+      @click="openFromBar"
+      class="relative flex cursor-pointer flex-col overflow-hidden rounded-[16px] border border-line-3 bg-glass px-2 pb-1 shadow-float backdrop-blur-xl md:rounded-[18px] md:pr-5 md:pl-3"
     >
-      <!-- Progress: a hairline on phones, a scrubber on desktop. -->
-      <div class="absolute inset-x-3 bottom-0 h-0.5 bg-line-2 md:hidden">
-        <div class="h-full bg-accent" :style="{ width: `${smoothPercent}%` }" />
-      </div>
-      <div class="absolute inset-x-0 -top-2 hidden md:block">
-        <SliderBar
-          :model-value="scrub ?? player.currentTime.value"
-          :max="player.duration.value || 1"
-          :label="t('player.seek')"
-          :value-text="formatDuration(player.currentTime.value)"
-          :hit-height="16"
-          :playing="player.isPlaying.value"
-          track-class="bg-transparent"
-          fill-class="bg-accent"
-          thumb-class="bg-accent"
-          @update:model-value="(v) => (scrub = v)"
-          @commit="commitSeek"
-        />
-      </div>
+      <div class="flex h-[60px] items-center gap-2 md:h-[68px] md:gap-4">
 
-      <!-- The heart sits beside the button that opens Now playing, not
-           inside it, so tapping it never opens the overlay. -->
-      <div
-        class="flex min-w-0 flex-1 items-center gap-1 md:w-[300px] md:flex-none"
-      >
-        <button
-          type="button"
-          class="flex min-w-0 flex-1 items-center gap-3 text-left"
-          :aria-label="t('player.openNowPlaying')"
-          @click="nowPlaying.open()"
-        >
-          <CoverArt
-            :thumb="150"
-            :src="track.hasCover ? track.cover : ''"
-            :name="track.album || track.title"
-            rounded="rounded-[10px]"
-            :letter-size="18"
-            :icon-size="18"
-            class="size-11 md:size-[52px]"
-          />
-          <span class="flex min-w-0 flex-col">
-            <span class="flex items-center gap-2">
-              <span class="truncate text-sm font-semibold">{{
-                track.title
-              }}</span>
+      <!-- Equal flexible sides keep the transport in the middle; the
+           title takes all of the left side. -->
+      <div class="flex min-w-0 flex-1 basis-0 items-center gap-1">
+        <!-- The cover (and any empty space beside the text) opens the
+             full player; artists and album are links. -->
+        <div class="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left">
+          <button
+            type="button"
+            data-mini-open
+            class="shrink-0 rounded-[10px]"
+            :aria-label="t('player.openNowPlaying')"
+            @click.stop="nowPlaying.open()"
+          >
+            <CoverArt
+              :thumb="150"
+              :src="track.hasCover ? track.cover : ''"
+              :name="track.album || track.title"
+              rounded="rounded-[10px]"
+              :letter-size="18"
+              :icon-size="18"
+              class="size-11 md:size-[52px]"
+            />
+          </button>
+          <span class="flex min-w-0 flex-col" data-mini-titles>
+            <span class="flex min-w-0 items-center gap-1.5 md:gap-2" data-mini-titleline>
+              <span class="truncate text-sm font-semibold" data-mini-title>{{ track.title }}</span>
               <ExplicitBadge v-if="track.explicit" />
-              <EqBars
-                v-if="player.isPlaying.value"
-                :size="10"
-                class="hidden md:inline-flex"
-              />
             </span>
-            <span class="truncate text-xs text-muted">
-              {{ [track.artist, track.album].filter(Boolean).join(' · ') }}
+            <span class="truncate text-xs text-muted" data-mini-artist>
+              <ArtistCredits
+                v-if="!track.isPodcast"
+                :artists="track.artists || []"
+                :artist="track.artist || ''"
+              /><template v-else>{{ track.artist }}</template
+              ><span v-if="track.album" class="hidden landscape:inline md:inline">
+                ·
+                <RouterLink
+                  v-if="albumRoute"
+                  :to="albumRoute"
+                  class="hover:text-fg hover:underline"
+                  @click.stop
+                  >{{ track.album }}</RouterLink
+                ><template v-else>{{ track.album }}</template></span
+              >
             </span>
           </span>
-        </button>
-        <!-- Phones have no room for it beside the transport buttons;
-             the rows and the full player carry the heart there. -->
-        <span
-          v-if="!track?.isPodcast && !track?.stream"
-          class="hidden sm:contents"
-          ><LikeButton :file="track.file"
-        /></span>
+        </div>
       </div>
 
-      <div class="flex items-center justify-center gap-1 md:flex-1 md:gap-3">
+      <div class="flex shrink-0 items-center justify-center gap-1 lg:gap-2" data-mini-controls>
         <UiIconButton
+          round
           v-if="canSimilar"
           icon="wand"
           :label="t('similar.findSimilar')"
+          class="max-md:!hidden"
           @click="goSimilar"
         />
         <UiIconButton
+          round
           icon="shuffle"
           :label="t('player.shuffle')"
           :active="player.shuffle.value"
           toggle
-          class="hidden md:inline-flex"
+          class="max-md:portrait:!hidden"
           @click="player.toggleShuffle()"
         />
         <UiIconButton
+          round
           icon="prev"
           :label="t('player.previous')"
-          class="hidden md:inline-flex"
           @click="player.prev()"
         />
         <button
           type="button"
-          class="flex size-11 items-center justify-center rounded-full text-fg md:bg-invert md:text-on-invert md:transition-transform md:hover:scale-105"
+          class="flex size-12 items-center justify-center rounded-full bg-invert text-on-invert transition-transform hover:scale-105 md:size-11"
+          data-mini-play
           :aria-label="
             player.isPlaying.value ? t('player.pause') : t('player.play')
           "
@@ -110,84 +101,99 @@
           />
         </button>
         <UiIconButton
+          round
           icon="next"
           :label="t('player.next')"
           @click="player.next()"
         />
         <UiIconButton
+          round
           :icon="player.repeatMode.value === 'one' ? 'repeat-one' : 'repeat'"
           :label="repeatLabel"
           :active="player.repeatMode.value !== 'off'"
           toggle
-          class="hidden md:inline-flex"
+          class="max-md:portrait:!hidden"
           @click="player.cycleRepeat()"
         />
         <UiIconButton
-          v-if="showMiniDownload"
+          round
+          v-if="showPlayerDownload"
           :icon="downloadBusy ? 'refresh' : 'download'"
           :label="t('actions.downloadItem', { name: trackTitle })"
-          :disabled="downloadBusy"
+          :disabled="downloadBusy || !pendingSong"
           :class="downloadBusy ? '[&_svg]:animate-spin' : ''"
           @click="downloadCurrent"
         />
-        <!-- Downloaded tracks show a static check in the download
-             button's slot: it does nothing, deleting happens from the
-             library rows. -->
+        <!-- The heart sits where the library check used to be. -->
         <span
-          v-if="showDownloadedCheck"
-          class="inline-flex size-10 shrink-0 items-center justify-center text-accent"
-          :title="t('search.inLibrary')"
-          aria-hidden="true"
-        >
-          <AppIcon name="check" :size="18" />
-        </span>
+          v-if="!track?.isPodcast && !track?.stream"
+          class="contents"
+          data-mini-like
+          ><LikeButton :file="track.file"
+        /></span>
       </div>
 
-      <div class="hidden items-center justify-end gap-1 md:flex md:w-[300px]">
-        <!-- Never wraps, and keeps one width for the whole track: the
-             invisible copy is the widest the text will get, so the
-             controls beside it don't shift as it ticks past 10:00. -->
+      <div class="hidden min-w-0 flex-1 basis-0 items-center justify-end gap-1 landscape:flex md:flex" data-mini-right>
+        <!-- Same row as the full player: playing bars, elapsed / total,
+             format, volume. The invisible widest clock keeps the width
+             fixed, so nothing shifts as the time ticks. -->
+        <EqBars v-if="player.isPlaying.value" :size="10" class="mr-1 shrink-0" />
         <span
-          class="tabular mr-2 hidden shrink-0 text-xs whitespace-nowrap text-muted lg:inline-grid"
+          data-mini-clock
+          class="tabular mr-1 inline-grid shrink-0 text-xs whitespace-nowrap text-muted"
         >
-          <span class="invisible col-start-1 row-start-1" aria-hidden="true">{{
-            clockSizer
-          }}</span>
+          <span class="invisible col-start-1 row-start-1" aria-hidden="true">{{ clockSizer }}</span>
           <span class="col-start-1 row-start-1 text-right"
-            >{{ formatDuration(player.currentTime.value) }} /
-            {{ formatDuration(player.duration.value) }}</span
+            >{{ formatDuration(player.currentTime.value) }} / {{ formatDuration(player.duration.value) }}</span
           >
         </span>
+        <span
+          v-if="track.format"
+          data-mini-format
+          class="mr-1 shrink-0 rounded-md border border-line-3 px-1.5 py-0.5 text-[11px] leading-none font-semibold tracking-wide text-muted"
+          >{{ track.format }}</span
+        >
+        <VolumeControl class="hidden min-w-0 lg:flex" width="hidden w-16 xl:flex" />
         <UiIconButton
-          v-if="showLyrics"
-          icon="lyrics"
-          :label="t('player.lyrics')"
-          size="sm"
-          @click="nowPlaying.open('lyrics')"
-        />
-        <UiIconButton
-          icon="queue"
-          :label="t('player.upNext')"
-          size="sm"
-          @click="nowPlaying.open('queue')"
-        />
-        <!-- The slider is what gives when the row is tight, so the time
-             next to it never has to. -->
-        <VolumeControl class="hidden min-w-0 lg:flex" width="w-20 min-w-8" />
-        <UiIconButton
+          round
           icon="expand"
           :label="t('player.openNowPlaying')"
           size="sm"
           @click="nowPlaying.open()"
         />
+        <!-- Close: stops playback, clears the queue and hides the player. -->
+        <UiIconButton
+          round
+          icon="x"
+          :label="t('common.close')"
+          size="sm"
+          data-player-close
+          class="shrink-0 max-md:portrait:!hidden"
+          @click="player.stop()"
+        />
       </div>
+      </div>
+      <!-- The full player's wave progress, slimmer; drag or tap to seek. -->
+      <WaveSeekBar
+        compact
+        data-mini-progress
+        class="mx-1 -mt-1.5 md:mx-0 md:mt-0"
+        :model-value="scrub ?? player.currentTime.value"
+        :max="player.duration.value || 1"
+        :label="t('player.seek')"
+        :value-text="formatDuration(player.currentTime.value)"
+        :playing="player.isPlaying.value"
+        :palette="palette"
+        track-color="rgb(128 128 128 / 0.28)"
+        @update:model-value="(v) => (scrub = v)"
+        @commit="commitSeek"
+      />
     </div>
   </Transition>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import AppIcon from '../ui/AppIcon.vue'
 import CoverArt from '../ui/CoverArt.vue'
@@ -195,19 +201,20 @@ import EqBars from '../ui/EqBars.vue'
 import ExplicitBadge from '../ui/ExplicitBadge.vue'
 import UiIconButton from '../ui/UiIconButton.vue'
 import LikeButton from '../player/LikeButton.vue'
-import SliderBar from '../player/SliderBar.vue'
-import { useSmoothTime } from '../player/useSmoothTime'
+import ArtistCredits from '../library/ArtistCredits.vue'
+import { RouterLink } from 'vue-router'
+import { playerAlbumRoute } from '/src/lib/playerNavigation'
+import WaveSeekBar from '../player/WaveSeekBar.vue'
+import { useCoverPalette } from '/src/model/coverPalette'
 import VolumeControl from '../player/VolumeControl.vue'
 import { usePlayer } from '/src/model/player'
 import { useDownloadManager, useProgressTracker } from '/src/model/download'
 import { useLibrary } from '/src/model/library'
-import { usePlayerPrefs } from '/src/model/playerPrefs'
 import { useNowPlaying, useUi } from '/src/model/ui'
 import { formatDuration, widestClock } from '/src/lib/format'
 import { useI18n } from '/src/i18n'
 
 const player = usePlayer()
-const { showLyrics } = usePlayerPrefs()
 const nowPlaying = useNowPlaying()
 const { t } = useI18n()
 const router = useRouter()
@@ -218,6 +225,7 @@ const ui = useUi()
 const scrub = ref(null)
 
 const track = computed(() => player.currentTrack.value)
+const albumRoute = computed(() => playerAlbumRoute(track.value))
 
 const trackArtist = computed(
   () =>
@@ -243,15 +251,19 @@ function goSimilar() {
 
 // A stream that isn't in the library yet can be queued from here; while
 // queued it spins instead of queueing a duplicate.
-const streamDownloadable = computed(
+const streamDownloaded = computed(
   () =>
     !!track.value?.stream &&
-    !!track.value.video_id &&
-    !library.hasSong(trackArtist.value, trackTitle.value)
+    library.hasSong(trackArtist.value, trackTitle.value, track.value)
+)
+// Same rule as the full player: any stream not in the library shows the
+// button; it works once the stream's video id is known.
+const showPlayerDownload = computed(
+  () => !!track.value?.stream && !streamDownloaded.value
 )
 const pendingSong = computed(() => {
-  if (!streamDownloadable.value) return null
   const tr = track.value
+  if (!showPlayerDownload.value || !tr?.video_id) return null
   return {
     name: trackTitle.value,
     artists: tr.artist ? [tr.artist] : [],
@@ -271,7 +283,6 @@ const downloadBusy = computed(() => {
   const state = downloadJob.value?.state
   return state === 'queued' || state === 'active'
 })
-const showMiniDownload = computed(() => !!streamDownloadable.value)
 
 function downloadCurrent() {
   const song = pendingSong.value
@@ -285,31 +296,11 @@ function downloadCurrent() {
   }
 }
 
-// A downloaded track (or a stream that landed in the library while
-// playing) shows a static check where the download button was.
-const showDownloadedCheck = computed(
-  () =>
-    !!track.value &&
-    !track.value.isPodcast &&
-    (!track.value.stream ||
-      library.hasSong(trackArtist.value, trackTitle.value))
-)
-
-// The phone hairline glides like the desktop scrubber (only animated
-// while it's the one on screen).
-const isPhone = useMediaQuery('(max-width: 767px)')
-const smoothTime = useSmoothTime(
-  () => player.currentTime.value,
-  () => isPhone.value && player.isPlaying.value,
-  () => player.duration.value || 0
-)
-const smoothPercent = computed(() =>
-  isPhone.value && player.duration.value
-    ? Math.min(100, (smoothTime.value / player.duration.value) * 100)
-    : player.progressPct.value
-)
-
 const clockSizer = computed(() => widestClock(player.duration.value))
+
+// Same cover colours as the full player's waves.
+const palette = useCoverPalette(track)
+
 
 const repeatLabel = computed(
   () =>
@@ -319,6 +310,17 @@ const repeatLabel = computed(
       one: t('player.repeatOne'),
     })[player.repeatMode.value]
 )
+
+// Any empty spot of the bar opens the full player; buttons, links, the
+// seek bar and menus keep their own job.
+function openFromBar(event) {
+  // The path is captured at dispatch: a toggle that re-renders its icon
+  // (repeat, shuffle, heart) leaves a detached target behind.
+  const hit = event.composedPath().some((el) =>
+    el instanceof Element && el.matches('button, a, input, [role="slider"], [role="menu"], [data-mini-progress]'))
+  if (hit || !event.target.isConnected) return
+  nowPlaying.open()
+}
 
 function commitSeek(value) {
   player.seek(value)

@@ -9,7 +9,11 @@
       :class="layout === 'grid' ? 'pb-7' : ''"
       :style="{ transform: `translateY(${row.start}px)` }"
     >
-      <div v-if="layout === 'grid'" :class="GRID_CLASS">
+      <div
+        v-if="layout === 'grid'"
+        :class="GRID_CLASS"
+        :style="{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }"
+      >
         <template v-for="item in row.items" :key="itemKey(item)">
           <slot :item="item" />
         </template>

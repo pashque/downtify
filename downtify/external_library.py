@@ -8,6 +8,7 @@ onto names already in the library when they clearly match.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 import unicodedata
@@ -29,6 +30,7 @@ from .library_catalog import (
     list_library_entries,
     resolve_library_file,
 )
+from .resource_identity import exact_name_key
 from .library_metadata import library_entry_for_file
 from .library_paths import EXTERNAL_LIBRARY_PREFIX
 from .library_paths_cache import invalidate_library_paths_cache
@@ -186,10 +188,11 @@ def _primary_artist(entry: dict[str, Any]) -> str:
     artist = str(entry.get('artist') or '').strip()
     if not artist:
         return ''
-    for sep in (';', '/', ',', '\\'):
-        if sep in artist:
-            return artist.split(sep, 1)[0].strip()
-    return artist
+    names = entry.get('artists')
+    if isinstance(names, list) and names:
+        first = names[0]
+        return str(first if isinstance(first, str) else first.get('name') or '').strip()
+    return artist.split(';')[0].strip()
 
 
 def song_identity(entry: dict[str, Any]) -> str:
@@ -197,7 +200,7 @@ def song_identity(entry: dict[str, Any]) -> str:
     if not title:
         stored = str(entry.get('file') or '').replace('\\', '/')
         title = Path(stored).stem
-    return f'{artist_match_key(_primary_artist(entry))}|{_title_key(title)}'
+    return json.dumps([exact_name_key(_primary_artist(entry)), exact_name_key(title)], ensure_ascii=False)
 
 
 def _durations_compatible(left: dict[str, Any], right: dict[str, Any]) -> bool:

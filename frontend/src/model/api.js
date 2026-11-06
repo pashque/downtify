@@ -134,6 +134,22 @@ function searchArtists(query) {
   return API.get('/api/artists/search', { params: { query } })
 }
 
+function getSpotifyAlbumEditions(album_id) {
+  return API.get('/api/spotify/album/editions', { params: { album_id } })
+}
+
+function spotifyLink(params) {
+  return API.get('/api/spotify/link', { params, paramsSerializer: { indexes: null } })
+}
+
+function youtubeMusicLink(params) {
+  return API.get('/api/youtube_music/link', { params, paramsSerializer: { indexes: null } })
+}
+
+function getArtistSpotifyId(name) {
+  return API.get('/api/artists/spotify_id', { params: { name } })
+}
+
 // Deezer's own global "what's trending" chart - `{ tracks, albums, artists }`.
 function getChart(limit = 25) {
   return API.get('/api/discover/chart', { params: { limit } })
@@ -366,6 +382,16 @@ function getLibrarySummary() {
   return API.get('/api/library/summary')
 }
 
+function setLibraryAlbumSource(artist, title, edition) {
+  return API.post('/api/library/album/source', { artist, title, edition })
+}
+
+function getLibraryAlbumSource(artist, title, edition) {
+  const params = { artist, title }
+  if (edition) params.edition = edition
+  return API.get('/api/library/album/source', { params })
+}
+
 function getLibraryAlbums() {
   return API.get('/api/library/albums')
 }
@@ -383,8 +409,12 @@ function updateLibraryVisibility(action, items) {
   return API.post('/api/library/visibility', { action, items })
 }
 
-function lookupLibrarySongs(songs) {
-  return API.post('/api/library/lookup', { songs })
+function lookupLibraryLocations(songs) {
+  return API.post('/api/library/locations', { songs })
+}
+
+function lookupLibrarySongs(songs, options = {}) {
+  return API.post('/api/library/lookup', { songs, ...options })
 }
 
 function getLyrics(file) {
@@ -807,10 +837,20 @@ function setSettings(settings) {
   })
 }
 
+async function getAudioDetails(file) {
+  const { data } = await API.get('/api/library/audio-details', { params: { file } })
+  return data
+}
+
 export default {
+  getAudioDetails,
   search,
   searchAlbums,
   searchArtists,
+  getArtistSpotifyId,
+  youtubeMusicLink,
+  spotifyLink,
+  getSpotifyAlbumEditions,
   getChart,
   finderSearch,
   finderArtist,
@@ -855,10 +895,13 @@ export default {
   listTracks,
   getLibrarySummary,
   getLibraryAlbums,
+  getLibraryAlbumSource,
+  setLibraryAlbumSource,
   getLibraryArtists,
   getLibraryVisibility,
   updateLibraryVisibility,
   lookupLibrarySongs,
+  lookupLibraryLocations,
   getLyrics,
   deleteDownload,
   deleteDownloadsBatch,

@@ -5,6 +5,7 @@
     :size="size"
     :active="liked"
     toggle
+    round
     :disabled="!file"
     :class="popping ? 'like-pop' : ''"
     @click.stop="onClick"

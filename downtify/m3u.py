@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
@@ -28,7 +29,7 @@ from .library_paths_cache import forget_cached_playlists
 # dropped. Everything else — including accented and non-Latin letters such
 # as "ö" (Sólrún) or "é" (Renata Béranger) — is preserved so folder names
 # match the original artist/album/playlist titles.
-_PLAYLIST_NAME_INVALID = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_PLAYLIST_NAME_INVALID = re.compile(r'[/\x00]')
 #: Marks an M3U the user built in the Library, so it can be edited
 #: without touching downloaded Spotify/YouTube playlists.
 MANUAL_M3U_MARKER = '#EXTDOWNTIFY:manual'
@@ -80,19 +81,15 @@ def find_m3u_for_name(
 
 
 def sanitize_playlist_name(name: str) -> str:
-    """Strip filesystem-unsafe characters from a playlist name.
-
-    Removes only characters that are illegal in filenames on common
-    filesystems while keeping Unicode letters, digits and punctuation
-    intact. Collapses runs of whitespace and trims leading/trailing dots
-    and spaces. Returns ``'playlist'`` if nothing is left after
-    sanitising so we never produce an empty filename.
+    """Apply Downtify's Linux path-component policy: remove only slash and NUL,
+    retaining valid punctuation and whitespace. Special dot components are
+    encoded separately by the downloader.
     """
 
     if not name:
         return 'playlist'
     cleaned = _PLAYLIST_NAME_INVALID.sub('', name)
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip().strip('.').strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned or 'playlist'
 
 
@@ -250,6 +247,34 @@ def m3u_path_for(
     return target_dir / f'{sanitize_playlist_name(playlist_name)}.m3u'
 
 
+def _preserved_m3u_entries(target, download_dir, slskd_dir, extra_dirs):
+    """Read only physically valid members, retaining their existing EXTINF."""
+    names = read_m3u_tracks(target, download_dir, slskd_dir, extra_dirs)
+    labels = {}
+    duration, title = -1, ''
+    try:
+        lines = target.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        lines = []
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith('#EXTINF:'):
+            seconds, _, title = line[8:].partition(',')
+            try:
+                duration = int(float(seconds))
+            except ValueError:
+                duration = -1
+        elif line and not line.startswith('#'):
+            labels[(target.parent / line).resolve()] = (duration, title)
+            duration, title = -1, ''
+    result = []
+    for name in names:
+        full = locate_library_file(name, download_dir, slskd_dir, extra_dirs)
+        duration, title = labels.get(full.resolve(), (-1, '')) if full else (-1, '')
+        result.append({'filename': name, 'duration': duration, 'title': title})
+    return result
+
+
 def write_m3u(
     download_dir: Path,
     playlist_name: str,
@@ -260,6 +285,8 @@ def write_m3u(
     extra_dirs: Optional[Sequence[Path]] = None,
     manual: bool = False,
     allow_empty: bool = False,
+    preserve_existing: bool = False,
+    source_order: Optional[Iterable[str]] = None,
 ) -> tuple[Optional[Path], int]:
     """Write an M3U for ``playlist_name``.
 
@@ -280,8 +307,32 @@ def write_m3u(
     target_dir = target.parent
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    rows = list(entries)
+    if preserve_existing:
+        # Incremental/missing-only downloads must not replace a large playlist
+        # with only this batch's few successes. Full snapshots retain replace.
+        existing = _preserved_m3u_entries(target, Path(download_dir), slskd_dir, extra_dirs)
+        updates = {row['filename']: row for row in rows if row.get('filename')}
+        seen = {row['filename'] for row in existing}
+        combined = [updates[row['filename']] if row['filename'] in updates else row for row in existing]
+        for row in rows:
+            name = row.get('filename')
+            if name and name not in seen:
+                combined.append(row)
+                seen.add(name)
+        rows = combined
+    if source_order is not None:
+        # An incremental merge retains membership, not the old ordering.
+        # Replay source occurrences (including repeated files), retaining
+        # members absent from this snapshot at the end until a full sync.
+        by_name = {row.get('filename'): row for row in rows}
+        ordered_names = [name for name in source_order if name in by_name]
+        ordered_set = set(ordered_names)
+        rows = [by_name[name] for name in ordered_names] + [
+            row for row in rows if row.get('filename') not in ordered_set
+        ]
     content, kept = build_m3u_content(
-        list(entries),
+        rows,
         download_dir=Path(download_dir),
         m3u_dir=target_dir,
         slskd_dir=slskd_dir,
@@ -300,7 +351,19 @@ def write_m3u(
 
     # UTF-8, no BOM, LF line endings — encoding='utf-8' on text mode
     # gives us no BOM, and we built the content with '\n' already.
-    target.write_text(content, encoding='utf-8', newline='\n')
+    # Readers must see either complete snapshot, never a truncated write.
+    mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n',
+                dir=target_dir, prefix=f'.{target.name}.', suffix='.tmp', delete=False) as out:
+            temporary = Path(out.name)
+            out.write(content)
+        temporary.chmod(mode)
+        temporary.replace(target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     forget_cached_playlists()
     logger.info('Wrote M3U: {} with {} tracks', target, kept)
     return target, kept

@@ -201,6 +201,14 @@ Resolve a pasted link to a single object describing what it points at — used b
 
 ---
 
+### `GET /api/spotify/album/editions`
+
+Authenticated read-only edition discovery for an opened Spotify album. `album_id` is required and must be exactly 22 ASCII letters/digits; malformed IDs return `400` before any provider lookup. Both ordinary signed-in library clients and admins may use it.
+
+The response contains `status`, the exact requested `edition`/`url`, its `tracks`, `release_type`, and verified `editions` with source IDs, titles, track counts and ordered semantic track summaries. It does not select a sibling, change remembered Library choices, bind files, or download audio. Unavailable discovery returns `status: "unavailable"` and an empty track list. The UI groups only proven duplicate editions while retaining the exact opened source; explicit/clean and standard/deluxe differences remain selectable. Discovery is bounded and may return fewer editions when Spotify lookup fails.
+
+---
+
 ### `GET /api/artists/top_songs/url`
 
 An artist's most popular songs, for the web UI's [Top Songs](features/top-songs.md) page.

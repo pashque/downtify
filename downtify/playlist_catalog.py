@@ -145,6 +145,7 @@ class PlaylistCatalog:
         playlist_name: str,
         rows: list[tuple[dict[str, Any], str, Path]],
         *,
+        track_orders: Optional[list[int]] = None,
         spotify_id: Optional[str] = None,
         user_id: Optional[int] = None,
     ) -> None:
@@ -165,7 +166,8 @@ class PlaylistCatalog:
             )
         for index, (song, filename, full_path) in enumerate(rows):
             self.upsert_track(
-                pl_name, song, filename, full_path, track_order=index
+                pl_name, song, filename, full_path,
+                track_order=track_orders[index] if track_orders is not None else index,
             )
 
     def backfill_from_monitor_db(

@@ -6,6 +6,7 @@
         v-for="(song, i) in data.songs"
         :key="song.song_id || song.url"
         :song="song"
+        :location="locationFor(song)"
         :index="i"
         :queue="queue"
         :songs="data.songs"
@@ -32,6 +33,7 @@ import AppIcon from '../ui/AppIcon.vue'
 import TrackDownPlay from './TrackDownPlay.vue'
 import TrackDownPlayHeader from './TrackDownPlayHeader.vue'
 import { useLibrary } from '/src/model/library'
+import { useLibraryLocations } from '/src/model/libraryLocations'
 import { playableQueue } from '/src/lib/topSongs'
 import { useI18n } from '/src/i18n'
 
@@ -44,6 +46,7 @@ const props = defineProps({
 
 const { t } = useI18n()
 const library = useLibrary()
+const { locationFor } = useLibraryLocations(computed(() => props.data.songs))
 
 // Playing a song queues the list's downloaded songs, in ranking order,
 // starting from that one.

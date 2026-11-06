@@ -54,6 +54,38 @@ Rewriting a playlist deletes library files whose tags clearly don't match the Sp
 Deleting tracks from the **Library** page already cleans up the catalog and rewrites the affected M3U files and Navidrome playlists in the background, so there's nothing to fix afterwards.
 :::
 
+## Artist names and credits
+
+Library and Link album headers hide the download action until destination checks finish, and keep it hidden once every canonical album-folder target is present, including singles and EPs. Missing/partial actions are never rendered speculatively while loading; the release header has no re-download path. Absent releases offer **Download album/single/EP**; partial releases offer **Download full album/single/EP**. Link track selection still offers **Download selected**. No replacement completion panel is added.
+
+Artist pages label downloaded local releases **Library** and the provider release shelf **Discography**. Only inspected provider availability is published, so owned releases do not flash briefly before being excluded. Album/Single/EP/Playlist cover badges appear on hover or keyboard focus across Home, Library and release cards. Green card download actions share the play action's glow.
+
+Release types come from exact provider resources (including canonical Spotify entities for search-unlisted editions), with known embedded tags as a Library fallback. They are never inferred from local track counts. Format pills report actual existing files. A bounded, temporary proof cache can recognize alternate Spotify IDs only when independently fetched complete edition sequences agree in ordered titles, credits, album identity, durations, explicit flags and positions. It neither rewrites file/source bindings nor performs provider calls during availability rendering; missing evidence remains unmatched.
+
+Artist names are not split at commas: `Tyler, The Creator` is one artist link. Structured artist credits are kept as individual names and displayed with comma separators, just as on the source page. The metadata source is independent of the audio download source.
+
+Provider-scoped track, artist and release IDs take priority when available. An explicitly opened Spotify album ID or an edition chosen in the existing menu is authoritative: it cannot silently fall back to a different same-title release. Menu/route choices are remembered per signed-in user and exact library album. Failed selections clear the prior expanded source, and selected source artwork/year follow the tracks without changing local tags. Existing file bindings are not rewritten to make another edition look downloaded. Preference saves are serialized so the latest choice wins.
+
+Fallback identity preserves punctuation, symbols, accents and version text (NFKC, lowercase and whitespace normalization only): `|||`, `||`, `!!!`, `+++`, `AC/DC` and `ACDC` are not interchangeable. Conflicting known IDs must not fall back to a same-title match. Ambiguous local matches return no file instead of choosing another artist's recording. Mobile sync uses the same structured credit boundaries.
+
+Artist discography shelves retain underlying provider release IDs while grouping proven duplicate editions in presentation. Explicit/clean and standard/deluxe editions remain separate; same track count alone does not establish a duplicate. Edition menus use meaningful labels rather than ID suffixes and disappear when only one distinct version remains. Owning CHROMAKOPIA does not hide CHROMAKOPIA +. The artist's **Available to download** section excludes fully physically downloaded releases, but keeps partial, missing and removed releases. Library cover cards use the same Album/Single/EP badge as artist cards, without a per-cover hide-from-users menu. Spotify pagination preserves successful pages after a later failure, and artist responses include `discography_status` to distinguish complete results from a capped or fallback overview; partial responses can be retried when reopening the Albums tab.
+
+YouTube audio matching also requires artist evidence and rejects contradictory known YouTube artist IDs. A title/duration match alone is not enough for a supplied artist, including names made entirely of symbols. If no candidate passes the checks, downloading fails rather than substituting a different artist. These checks reduce mismatches but cannot certify that an upstream uploader labelled the audio honestly.
+
+Legacy files without structured credits keep comma-containing names intact. If an older structured list accidentally split the album artist, consecutive fragments are recombined only when they exactly match the tagged album artist; unrelated guest credits are not guessed. Updating the metadata cache does not rewrite audio files or their tags.
+
+### Streaming and undownloaded Spotify album credits
+
+Album resolution also reads the requested Spotify album's public canonical page for structured artist entities. These names and ordered artist IDs are matched to the existing embed rows by exact track identity and compatible title/full-credit text, so collaborations get separate links before downloading while a literal name such as `Tyler, The Creator` remains one link. This is album-level metadata retrieval, not a network request per rendered track. It does not change the selected edition, reorder or drop tracks, download audio, or rewrite existing tags.
+
+If Spotify's canonical state is unavailable, malformed, incomplete or conflicting, unmatched rows retain the safe existing fallback; comma boundaries are never guessed. Exact structured provider credits take precedence over weaker cached subtitles. Spotify playlists continue to use their existing bulk paginated structured metadata, with opaque fallback if that source is unavailable.
+
+### Explicit artist-credit repair
+
+`POST /api/library/artist-credits/repair` is admin-only and defaults to a dry run. An explicit `dry_run: false` can repair selected ID3v2.4 `ARTISTS` lists after validating the original file SHA-256 and preserving the full comma-joined display credit. It backs up each original file and plan under `/data/artist-credit-repair-backups/`, preserves file size, audio bytes, unrelated tags, ownership and modification time, then refreshes the per-file metadata cache. After a repair, call `GET /list?refresh=true` to rebuild the existing Library snapshot before verifying the UI. It does not rename files or download audio.
+
+The same maintenance request can store verified `source_tracks` by exact Spotify track ID in the existing track metadata cache. Album/link views use those structured credits only when the track name and full credit text agree, without per-track network requests while rendering.
+
 ## Library page
 
 The Library page has four tabs — **Albums**, **Artists**, **Playlists** and **Tracks**:

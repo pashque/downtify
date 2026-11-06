@@ -49,6 +49,15 @@ describe('keyboard shortcuts', () => {
     expect(player.toggle).toHaveBeenCalledOnce()
   })
 
+  it('space is always play/pause, even on a focused button', () => {
+    const { handle, player } = setup()
+    const event = key(' ', { target: { tagName: 'BUTTON' } })
+    handle(event)
+    expect(player.toggle).toHaveBeenCalledOnce()
+    // Stops the browser from also clicking the focused button.
+    expect(event.preventDefault).toHaveBeenCalled()
+  })
+
   it('ignores keys typed into a field', () => {
     const { handle, player } = setup()
     handle(key(' ', { target: { tagName: 'INPUT' } }))

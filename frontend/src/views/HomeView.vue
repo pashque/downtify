@@ -228,7 +228,7 @@
         >
       </div>
       <div
-        class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        class="tile-grid"
       >
         <MediaTile
           v-for="album in recentAlbums"
@@ -238,6 +238,7 @@
             query: { artist: album.artist, title: album.title },
           }"
           :title="album.title"
+          :release-type="album.release_type || ''"
           :subtitle="[album.artist, album.year].filter(Boolean).join(' · ')"
           :cover="album.cover"
           :name="album.title"
@@ -262,7 +263,7 @@
         >
       </div>
       <div
-        class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+        class="tile-grid"
       >
         <MediaTile
           v-for="playlist in recentPlaylists"

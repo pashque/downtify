@@ -10,9 +10,17 @@
         :letter-size="round ? 40 : 52"
         class="aspect-square w-full"
       >
+        <!-- Same "Playing" badge as library cards when this release plays. -->
         <span
-          v-if="typeLabel"
-          class="absolute top-2.5 left-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur"
+          v-if="isPlaying"
+          class="absolute top-2.5 left-2.5 flex h-6 items-center gap-1.5 rounded-full bg-black/55 px-2 text-[11px] font-semibold text-white backdrop-blur"
+        >
+          <EqBars :size="10" />{{ t('player.playing') }}
+        </span>
+        <span
+          v-else-if="typeLabel"
+          data-release-badge
+          class="tile-badge absolute top-2.5 left-2.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur"
           >{{ typeLabel }}</span
         >
       </CoverArt>
@@ -20,7 +28,7 @@
     <button
       v-if="!round"
       type="button"
-      class="tile-play absolute right-3 bottom-[4.25rem] flex size-11 items-center justify-center rounded-full shadow-float transition-transform hover:scale-105"
+      class="tile-play tile-action-glow absolute right-3 bottom-[4.25rem] flex size-11 items-center justify-center rounded-full transition-transform hover:scale-105"
       :class="queued ? 'bg-surface text-accent' : 'bg-accent text-on-accent'"
       :aria-label="t('actions.downloadItem', { name: release.name })"
       :disabled="queued"
@@ -32,16 +40,13 @@
         stroke-width="2.2"
       />
     </button>
-    <RouterLink
-      :to="linkTo"
-      class="flex min-w-0 flex-col gap-0.5"
-      :class="round ? 'items-center text-center' : ''"
-    >
-      <span class="w-full truncate text-sm font-semibold">{{
-        release.name
-      }}</span>
-      <span class="w-full truncate text-[13px] text-muted">{{ subtitle }}</span>
-    </RouterLink>
+    <div class="flex min-w-0 flex-col gap-0.5" :class="round ? 'items-center text-center' : ''">
+      <RouterLink :to="linkTo" class="w-full truncate text-sm font-semibold">{{ release.name }}</RouterLink>
+      <span class="w-full truncate text-[13px] text-muted">
+        <template v-if="!round"><ArtistCredits :artists="release.artists" :artist="release.artist" /><span v-if="release.year"> · {{ release.year }}</span></template>
+        <RouterLink v-else :to="linkTo">{{ subtitle }}</RouterLink>
+      </span>
+    </div>
   </article>
 </template>
 
@@ -49,6 +54,10 @@
 import { computed, ref } from 'vue'
 import AppIcon from '../ui/AppIcon.vue'
 import CoverArt from '../ui/CoverArt.vue'
+import EqBars from '../ui/EqBars.vue'
+import ArtistCredits from '../library/ArtistCredits.vue'
+import { usePlayer } from '/src/model/player'
+import { isPlayingRelease } from '/src/lib/nowPlaying'
 // Display only (a Deezer cover at its medium size); the download below
 // resolves the release's own link, never this image.
 import { deezerImage } from '/src/lib/deezerImage'
@@ -67,6 +76,8 @@ const { t } = useI18n()
 const dm = useDownloadManager()
 const ui = useUi()
 const queued = ref(false)
+const player = usePlayer()
+const isPlaying = computed(() => !props.round && isPlayingRelease(props.release, player.currentTrack.value))
 
 const linkTo = computed(
   () =>

@@ -11,7 +11,8 @@ import {
   groupAlbums,
   groupArtists,
   normalizeTrack,
-  indexTracksBySong,
+  findSongTrack,
+  providerSongKey,
   songKey,
   splitPlaylists,
 } from '/src/lib/library'
@@ -89,10 +90,22 @@ const artistCount = computed(() =>
       ? artistsIndex.value.length
       : summary.value.artistCount
 )
-const songKeys = computed(
-  () => new Set(tracks.value.map((track) => songKey(track.artist, track.title)))
-)
-const tracksBySong = computed(() => indexTracksBySong(tracks.value))
+
+// Bucket once per library update: song rows must not scan the whole
+// catalog on every render. Keep candidates rather than losing editions.
+const tracksByIdentity = computed(() => {
+  const index = new Map()
+  for (const track of tracks.value) {
+    const keys = [`song:${songKey(track.artists?.length ? track.artists : track.artist, track.title)}`]
+    const id = providerSongKey(track)
+    if (id) keys.push(`id:${id}`)
+    for (const key of keys) {
+      if (!index.has(key)) index.set(key, [])
+      index.get(key).push(track)
+    }
+  }
+  return index
+})
 
 let pending = null
 let pendingTracks = null
@@ -107,6 +120,7 @@ function albumFromSummary(row) {
     title: row.title,
     artist: row.artist,
     year: row.year || '',
+    release_type: String(row.release_type || ''),
     tracks: albumTracks,
     trackCount: albumTracks.length,
     cover: coverTrack ? coverURL(coverTrack.file) : '',
@@ -123,6 +137,7 @@ function albumFromIndex(row) {
     title: row.title,
     artist: row.artist,
     year: row.year || '',
+    release_type: String(row.release_type || ''),
     tracks: [],
     trackCount: Number(row.track_count) || 0,
     cover: coverFile ? coverURL(coverFile) : '',
@@ -284,7 +299,14 @@ async function ensureArtists({ force = false } = {}) {
 async function loadPlaylistTracks(name) {
   const text = String(name || '').trim()
   if (!text) return
-  const res = await API.listTracks({ playlist: text })
+  const [res, playlistsRes] = await Promise.all([
+    API.listTracks({ playlist: text }),
+    API.listPlaylists(),
+  ])
+  // A monitor sweep or metadata-only repair can reorder the M3U while
+  // this tab still holds its old files array. Merging track metadata alone
+  // cannot fix that: buildPlaylists intentionally follows manifest order.
+  rawPlaylists.value = playlistsRes.data || []
   mergeTrackRows(res.data)
   usePlayer().refreshTracks(tracksByFile.value)
 }
@@ -305,13 +327,25 @@ async function searchTracks(query, { limit = 80 } = {}) {
   return rows
 }
 
-async function lookupSongs(songs) {
+async function lookupSongs(songs, { destination = false, playlist_name = '' } = {}) {
   const list = (songs || []).filter(Boolean)
   if (!list.length) return []
-  const res = await API.lookupLibrarySongs(list)
-  mergeTrackRows(res.data)
+  const options = destination ? { destination_status: true, playlist_name } : {}
+  const res = await (destination ? API.lookupLibrarySongs(list, options) : API.lookupLibrarySongs(list))
+  const rows = Array.isArray(res.data) ? res.data : res.data?.tracks || []
+  if (destination && Array.isArray(res.data?.destinations)) {
+    const statuses = new Map(res.data.destinations.map((status) => [status.key, status]))
+    for (const song of list) {
+      const status = statuses.get(String(song.song_id || song.url || ''))
+      if (!status) continue
+      song.downtify_destination_exists = status.exists === true
+      song.downtify_destination_stem = status.stem || ''
+      song.downtify_destination_file = status.file || null
+    }
+  }
+  mergeTrackRows(rows)
   usePlayer().refreshTracks(tracksByFile.value)
-  return res.data || []
+  return rows
 }
 
 let refreshTimer = null
@@ -431,13 +465,16 @@ function findPlaylist(name) {
   return playlists.value.find((playlist) => playlist.name === name) || null
 }
 
-function hasSong(artist, title) {
-  return songKeys.value.has(songKey(artist, title))
+function hasSong(artist, title, song = null) {
+  return !!findTrack(artist, title, song)
 }
 
 /** The library track for a song that is already downloaded, or `null`. */
-function findTrack(artist, title) {
-  return tracksBySong.value.get(songKey(artist, title)) || null
+function findTrack(artist, title, song = null) {
+  const id = providerSongKey(song)
+  const index = tracksByIdentity.value
+  const candidates = (id && index.get(`id:${id}`)) || index.get(`song:${songKey(artist, title)}`) || []
+  return findSongTrack(candidates, artist, title, song)
 }
 
 export function useLibrary() {

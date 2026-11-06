@@ -67,7 +67,7 @@ export function useTopSongs(artist) {
     const name = (song.artists || [])[0] || song.artist
     const state = songDownloadState(
       tracker.getBySong(song),
-      library.hasSong(name, song.name)
+      library.hasSong(name, song.name, song)
     )
     return state === 'library' || state === 'new' ? state : 'queue'
   }

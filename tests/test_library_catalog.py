@@ -234,9 +234,9 @@ def test_list_library_entries_survives_restart_via_sqlite(
         bind_listing_store(None)
 
 
-def test_song_key_matches_frontend_rules():
+def test_song_key_uses_legacy_semicolon_credits():
     assert song_key(
-        'Kenji Aoki, Mira Kovač', 'Harbor Lights (Remastered)'
+        'Kenji Aoki; Mira Kovač', 'Harbor Lights (Remastered)'
     ) == song_key('kenji aoki', 'Harbor  Lights')
     assert song_key('Ana Luz', 'Blue Hour feat. Someone') == song_key(
         'Ana Luz', 'Blue Hour'

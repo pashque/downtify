@@ -12,6 +12,8 @@
         :cover="heroPhoto.cover"
         :cover-fallback="heroPhoto.fallback"
         :banner="artBannerUrl"
+        :loading="artistUpdating"
+        loading-label=""
         photo-editable
         banner-editable
         :name="artist.name"
@@ -71,8 +73,9 @@
         <UiTabs class="mt-4" :items="tabs" :model-value="tab" />
 
         <template v-if="tab === 'albums'">
+          <h2 v-if="artist.albums.length" data-library-releases class="text-display text-xl font-semibold">{{ t('library.title') }}</h2>
           <div
-            class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+            class="tile-grid"
           >
             <MediaTile
               v-for="album in artist.albums"
@@ -82,6 +85,7 @@
                 query: { artist: album.artist, title: album.title },
               }"
               :title="album.title"
+              :release-type="album.release_type || ''"
               :subtitle="
                 [album.year, t('common.tracks', { count: album.tracks.length })]
                   .filter(Boolean)
@@ -92,11 +96,30 @@
               @play="playAlbum(album)"
             />
           </div>
+          <!-- Only physically complete releases are excluded from this shelf. -->
+          <h2 v-if="discographyGroups.length" class="mt-6 text-display text-xl font-semibold">{{ t('finder.discography') }}</h2>
+          <section
+            v-for="group in discographyGroups"
+            :key="group.id"
+            class="mt-6 flex flex-col gap-4"
+            :data-discography="group.id"
+          >
+            <h2 class="text-display text-lg font-semibold">{{ group.label }}</h2>
+            <div
+              class="tile-grid"
+            >
+              <ReleaseCard
+                v-for="release in group.items"
+                :key="release.album_id || release.url"
+                :release="release"
+              />
+            </div>
+          </section>
         </template>
 
         <template v-else-if="tab === 'related'">
           <div
-            class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+            class="tile-grid"
           >
             <MediaTile
               v-for="item in relatedArtistItems"
@@ -202,7 +225,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import UiBadge from '/src/components/ui/UiBadge.vue'
 import UiButton from '/src/components/ui/UiButton.vue'
 import UiEmpty from '/src/components/ui/UiEmpty.vue'
@@ -218,6 +241,9 @@ import MediaTile from '/src/components/library/MediaTile.vue'
 import PlayButton from '/src/components/library/PlayButton.vue'
 import TopSongsShelf from '/src/components/library/TopSongsShelf.vue'
 import TrackList from '/src/components/library/TrackList.vue'
+import ReleaseCard from '/src/components/search/ReleaseCard.vue'
+import { discographySections, inspectDiscography } from '/src/lib/discography'
+import { useProgressTracker } from '/src/model/download'
 import API from '/src/model/api'
 import { useLibrary } from '/src/model/library'
 import { usePlayer } from '/src/model/player'
@@ -235,6 +261,7 @@ import { useI18n } from '/src/i18n'
 
 const { t, locale } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const library = useLibrary()
 const player = usePlayer()
 const actions = useTrackActions()
@@ -242,12 +269,59 @@ const visibility = useVisibility()
 const playlistActions = usePlaylistActions()
 const ui = useUi()
 
+function createBusyTracker() {
+  const counts = { art: 0, profile: 0, discography: 0, inspection: 0 }
+  const generations = { ...counts }
+  const updating = ref(false)
+  const sync = () => { updating.value = Object.values(counts).some(Boolean) }
+  return {
+    updating,
+    begin(kind) {
+      const generation = generations[kind]
+      counts[kind]++
+      sync()
+      let done = false
+      return () => {
+        if (done || generations[kind] !== generation) return
+        done = true
+        counts[kind] = Math.max(0, counts[kind] - 1)
+        sync()
+      }
+    },
+    invalidate(kind) {
+      for (const key of (kind ? [kind] : Object.keys(counts))) {
+        generations[key]++
+        counts[key] = 0
+      }
+      sync()
+    },
+  }
+}
+const busyTracker = createBusyTracker()
+const artistUpdating = computed(() => busyTracker.updating.value || topSongsLoading.value)
+watch(() => route.query.name, () => busyTracker.invalidate())
+onBeforeUnmount(() => busyTracker.invalidate())
+
 const ready = ref(false)
 
 async function loadArtist() {
   ready.value = false
-  await library.loadArtistTracks(String(route.query.name || ''))
-  ready.value = true
+  const name = String(route.query.name || '')
+  await library.loadArtistTracks(name)
+  if (route.query.name !== name) return
+  // Featured/catalog artists may have no album grouped under their name.
+  // Resolve only after navigation, never during card/row rendering.
+  if (name && !library.findArtist(name)) {
+    try {
+      const res = await API.getArtistSpotifyId(name)
+      if (route.query.name !== name) return
+      if (/^[A-Za-z0-9]{22}$/.test(res.data?.id || '')) {
+        await router.replace({ name: 'Link', query: { url: `https://open.spotify.com/artist/${res.data.id}` } })
+        return
+      }
+    } catch { /* Keep the native not-found state if no artist is found. */ }
+  }
+  if (route.query.name === name) ready.value = true
 }
 
 onMounted(loadArtist)
@@ -430,14 +504,19 @@ const heroPhoto = computed(() => {
   }
 })
 
+let artRequest = 0
 async function refreshArt() {
+  const current = ++artRequest
   if (!artist.value?.name) {
     artPhotoUrl.value = ''
     artBannerUrl.value = ''
     return
   }
+  const requestArtist = artist.value.name
+  const finishBusy = busyTracker.begin('art')
   try {
-    const res = await API.getArtistArt(artist.value.name)
+    const res = await API.getArtistArt(requestArtist)
+    if (current !== artRequest || artist.value?.name !== requestArtist) return
     // The saved file keeps the same URL across re-saves (named after the
     // artist, see downtify/artist_profile.py), so a re-upload never changes
     // the <img> src on its own - its version, which does change, goes in.
@@ -450,10 +529,14 @@ async function refreshArt() {
       res.data?.banner_version
     )
   } catch {
-    artPhotoUrl.value = ''
-    artBannerUrl.value = ''
+    if (current === artRequest && artist.value?.name === requestArtist) {
+      artPhotoUrl.value = ''
+      artBannerUrl.value = ''
+    }
+  } finally {
+    finishBusy()
   }
-  artLoaded.value = true
+  if (current === artRequest && artist.value?.name === requestArtist) artLoaded.value = true
 }
 
 watch(
@@ -502,6 +585,75 @@ const profile = ref(blankProfile())
 const profileReady = ref(false)
 const spotifyId = computed(() =>
   String(profile.value.platforms_id?.spotify || '')
+)
+
+// Every Spotify release of this artist, split into Albums and Singles;
+// releases already in the library stay in the library grid above.
+const discography = ref([])
+let discographyRequest = 0
+watch(
+  [spotifyId, () => tab.value === 'albums'],
+  async ([id, open]) => {
+    const current = ++discographyRequest
+    busyTracker.invalidate('discography')
+    if (!id) { discography.value = []; return }
+    if (!open || discography.value.id === id) return
+    const finishBusy = busyTracker.begin('discography')
+    try {
+      const res = await API.resolveUrl(`https://open.spotify.com/artist/${id}`)
+      if (current !== discographyRequest) return
+      const list = Array.isArray(res.data?.albums) ? res.data.albums : []
+      // A partial provider response must be retryable when the tab reopens.
+      if (res.data?.discography_status?.complete !== false) list.id = id
+      discography.value = list
+    } catch {
+      // Optional shelf: the library albums stay as they are.
+    } finally {
+      finishBusy()
+    }
+  },
+  { immediate: true }
+)
+const inspectedDiscography = ref([])
+let inspectedArtist = ''
+const tracker = useProgressTracker()
+const inspectionRevision = ref(0)
+const refreshDiscographyPresence = () => { inspectionRevision.value++ }
+onMounted(() => window.addEventListener('focus', refreshDiscographyPresence))
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshDiscographyPresence)
+  inspectionRequest++
+})
+let inspectionRequest = 0
+watch(() => {
+  tracker.queueVersion.value
+  return JSON.stringify([
+    inspectionRevision.value,
+    spotifyId.value, tab.value === 'albums',
+    discography.value.map(release => release.album_id || release.url),
+    trackFiles.value,
+    tracker.downloadQueue.value.filter(item => item.state === 'done').map(item => item.filename),
+  ])
+}, async () => {
+  const current = ++inspectionRequest
+  if (inspectedArtist !== spotifyId.value) {
+    inspectedDiscography.value = []
+    inspectedArtist = spotifyId.value
+  }
+  busyTracker.invalidate('inspection')
+  if (tab.value !== 'albums') return
+  const finishBusy = busyTracker.begin('inspection')
+  try {
+    const inspected = await inspectDiscography(discography.value, artist.value?.albums || [], API)
+    if (current === inspectionRequest) inspectedDiscography.value = inspected
+  } catch { /* Keep the last stable inspected list when inspection fails. */ }
+  finally { finishBusy() }
+}, { immediate: true })
+const discographyGroups = computed(() =>
+  discographySections(inspectedDiscography.value, artist.value?.albums || [], {
+    albums: t('library.albums'),
+    singles: t('artist.singlesAndEps'),
+  })
 )
 
 // The saved bio is plain text (see artist_profile._format_bio_text): a
@@ -582,17 +734,22 @@ async function refreshProfile() {
     profile.value = blankProfile()
     return
   }
+  const requestArtist = artist.value.name
+  const finishBusy = busyTracker.begin('profile')
   try {
     // Seeds a brand-new artist's profile on their very first visit - a
     // cheap no-op every time after, once a profile file exists at all.
     const res = await API.ensureArtistProfile(
-      artist.value.name,
+      requestArtist,
       locale.value,
       trackFiles.value
     )
+    if (artist.value?.name !== requestArtist) return
     profile.value = res.data || blankProfile()
   } catch {
-    profile.value = blankProfile()
+    if (artist.value?.name === requestArtist) profile.value = blankProfile()
+  } finally {
+    finishBusy()
   }
 }
 
@@ -600,9 +757,12 @@ async function refreshProfile() {
 // ensure has finished saving a brand-new artist's photo/banner, so the art
 // is asked for again once it's done - otherwise it'd only show up after a
 // reload.
+let seedRequest = 0
 async function seedProfile() {
+  const current = ++seedRequest
   profileReady.value = false
   await refreshProfile()
+  if (current !== seedRequest) return
   profileReady.value = true
   await refreshArt()
 }

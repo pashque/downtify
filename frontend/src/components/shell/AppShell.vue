@@ -3,7 +3,9 @@
   <div v-else class="flex min-h-dvh bg-bg text-fg">
     <SideNav class="hidden md:flex" />
     <div class="flex min-w-0 flex-1 flex-col">
-      <TopBar />
+      <!-- Phones: no top bar (logo + search) except on the Search page,
+           whose search box it is. -->
+      <TopBar :class="routeName === 'Search' ? '' : 'max-md:hidden'" />
       <main class="flex-1 pb-8">
         <RouterView v-slot="{ Component, route: viewRoute }">
           <Transition name="page" mode="out-in">
@@ -33,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNav from './SideNav.vue'
 import TopBar from './TopBar.vue'
@@ -67,6 +69,7 @@ const { t } = useI18n()
 const player = usePlayer()
 const { showLyrics } = usePlayerPrefs()
 const route = useRoute()
+const routeName = computed(() => route.name)
 const router = useRouter()
 const ui = useUi()
 const nowPlaying = useNowPlaying()

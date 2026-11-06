@@ -899,7 +899,7 @@ def test_find_match_title_first_joins_all_artists(monkeypatch):
     }
 
 
-def test_find_match_without_artists_searches_only_once_per_stage(
+def test_find_match_without_artists_does_not_search_title_only(
     monkeypatch,
 ):
     fake = _FakeYTMByQuery({})
@@ -909,9 +909,7 @@ def test_find_match_without_artists_searches_only_once_per_stage(
         None,
         None,
     )
-    assert set(fake.queries) == {'Held Together'}
-    # top result + songs + videos, and no repeated title-first round.
-    assert len(fake.queries) == 3
+    assert fake.queries == []
 
 
 def test_find_match_album_fallback_runs_after_both_query_orders_miss(
@@ -1011,7 +1009,7 @@ def test_find_match_replaces_weak_music_match_with_closer_youtube_hit(
     assert match is None
 
 
-def test_find_match_keeps_weak_music_match_when_youtube_is_not_closer(
+def test_find_match_rejects_all_out_of_tolerance_matches(
     monkeypatch,
 ):
     row = _song_row('Song', 'Artist', '', 215, 'ytm-hit')
@@ -1026,8 +1024,37 @@ def test_find_match_keeps_weak_music_match_when_youtube_is_not_closer(
         'artists': ['Artist'],
         'duration': 200,
     })
-    assert video_id == 'ytm-hit'
-    assert match is row
+    assert video_id is None
+    assert match is None
+
+
+def test_find_match_cannot_revive_rejected_radio_fallback(monkeypatch):
+    radio = _song_row('On Your Side', 'Jacques Greene', 'ANTH01', 248, 'radio')
+    monkeypatch.setattr(providers, '_find_youtube_music_match', lambda song: ('radio', radio))
+    monkeypatch.setattr(providers, '_find_match_via_youtube', lambda song: (None, None))
+    assert find_match({'name': 'On Your Side', 'artists': ['Jacques Greene'], 'duration': 343}) == (None, None)
+
+
+def test_find_match_skips_short_radio_edit_for_full_recording(monkeypatch):
+    radio = _song_row('On Your Side (Radio Edit)', 'Jacques Greene', '', 248, 'radio')
+    full = _song_row('On Your Side', 'Jacques Greene', 'Feel Infinite', 344, 'full')
+    fake = _FakeYTMByFilter({'songs': [radio, full]})
+    monkeypatch.setattr(providers, '_ytm', lambda: fake)
+    song = {'name': 'On Your Side', 'artists': ['Jacques Greene', 'How To Dress Well'], 'album_name': 'Feel Infinite', 'duration': 343}
+    video_id, match = providers._find_youtube_music_match(song)
+    assert video_id == 'full'
+    assert match is full
+
+
+def test_pick_best_fails_closed_when_duration_missing():
+    candidate = _song_row('On Your Side', 'Jacques Greene', 'Feel Infinite', 0, 'unknown-length')
+    assert _pick_best([candidate], 343, 'On Your Side', ['Jacques Greene'], 'Feel Infinite') is None
+
+
+def test_pick_best_rejects_duration_outside_strict_gate_and_tries_next():
+    radio = _song_row('On Your Side', 'Jacques Greene', '', 248, 'radio')
+    full = _song_row('On Your Side', 'Jacques Greene', '', 344, 'full')
+    assert _pick_best([radio, full], 343, 'On Your Side', ['Jacques Greene']) is full
 
 
 def test_find_match_skips_youtube_when_music_match_is_strong(monkeypatch):
@@ -1125,7 +1152,7 @@ def test_youtube_fallback_credits_topic_channel_as_artist(monkeypatch):
     assert calls == ['Artist Song']
 
 
-def test_youtube_entry_to_result_splits_combined_artist_credit():
+def test_youtube_entry_to_result_preserves_combined_artist_credit():
     result = providers._youtube_entry_to_result(
         _yt_entry(
             'id1',
@@ -1136,7 +1163,7 @@ def test_youtube_entry_to_result_splits_combined_artist_credit():
     )
     names = [a['name'] for a in result['artists']]
     assert 'Florence and the Machine & Artist B' in names
-    assert 'Artist B' in names
+    assert 'Artist B' not in names  # Do not invent identities inside band names.
     assert 'SomeChannel' in names
     assert result['title'] == 'Song'
     assert result['duration_seconds'] == 180
@@ -1209,14 +1236,17 @@ def test_titles_match_segment_rejections(target, candidate):
     assert not _titles_match(target, candidate)
 
 
-def test_artists_overlap_ignores_leading_the():
-    # Regression: Spotify's "Eden Project" vs YouTube Music's
-    # "The Eden Project" failed "Crazy in Love".
-    assert _artists_overlap(
+def test_artist_spelling_alias_requires_shared_provider_identity():
+    # Names alone cannot prove that differently named acts are the same.
+    assert not _artists_overlap(
         ['Eden Project'], {'artists': [{'name': 'The Eden Project'}]}
     )
-    assert _artists_overlap(
+    assert not _artists_overlap(
         ['The Beatles'], {'artists': [{'name': 'Beatles, and Someone'}]}
+    )
+    assert _artists_overlap(
+        [{'name': 'Eden Project', 'id': 'UCknown'}],
+        {'artists': [{'name': 'The Eden Project', 'id': 'UCknown'}]}
     )
     assert not _artists_overlap(
         ['Eden Project'], {'artists': [{'name': 'EDEN'}]}
@@ -1269,6 +1299,7 @@ def test_find_match_accepts_artist_upload_with_romanized_segment(
             'videoId': 'weaver',
             'title': 'くちづけDiamond - Kuchizuke Diamond',
             'artists': [{'name': 'WEAVER'}],
+            'duration_seconds': 236,
         },
     ]
     fake = _FakeYTMByFilter({None: top})
@@ -1288,7 +1319,7 @@ def test_artists_overlap_splits_packed_credit():
         ]
     }
     assert _artists_overlap(['JIRAYAUAI', 'Douth!'], packed)
-    assert _artists_overlap(['Sam Sam'], packed)
+    assert not _artists_overlap(['Sam Sam'], packed)  # A guest is not the lead.
     assert not _artists_overlap(['Ana Castela'], packed)
     duo = {'artists': [{'name': 'Rionegro & Solimões'}]}
     assert _artists_overlap(['Rionegro & Solimões'], duo)
@@ -1305,7 +1336,7 @@ def test_find_match_resolves_dash_suffixed_live_title(monkeypatch):
     monkeypatch.setattr(providers, '_ytm', lambda: fake)
     video_id, match = find_match({
         'name': 'Azulejo - Ao Vivo',
-        'artists': ['Mayke & Rodrigo', 'Clayton & Romário'],
+        'artists': ['Clayton & Romário', 'Mayke & Rodrigo'],
         'duration': 142,
     })
     assert video_id == 'right'
@@ -1423,7 +1454,7 @@ def test_find_match_via_album_finds_track_missing_from_text_search(
         lambda _browse_id: (
             [
                 {'videoId': 'eAX90iTkiPk', 'title': 'Quiet Static'},
-                {'videoId': 'TzIpcPo8UIo', 'title': 'Held Together'},
+                {'videoId': 'TzIpcPo8UIo', 'title': 'Held Together', 'artists': [{'name': 'Mica Ferreira'}]},
             ],
             10,
         ),
@@ -1733,14 +1764,14 @@ def test_prefer_official_audio_track_swaps_omv_for_atv(monkeypatch):
     # the official-audio (ATV) upload of the same song when one exists.
     fake = _FakeYTM([
         _search_hit('omv-id', 'Song', 'Artist', 'MUSIC_VIDEO_TYPE_OMV', 240),
-        _search_hit('atv-id', 'Song', 'Artist', 'MUSIC_VIDEO_TYPE_ATV', 200),
+        _search_hit('atv-id', 'Song', 'Artist', 'MUSIC_VIDEO_TYPE_ATV', 238),
     ])
     monkeypatch.setattr(providers, '_ytm', lambda: fake)
     video_id, duration = providers._prefer_official_audio_track(
         'omv-id', 240, 'Song', ['Artist'], 'MUSIC_VIDEO_TYPE_OMV'
     )
     assert video_id == 'atv-id'
-    assert duration == 200
+    assert duration == 238
 
 
 def test_prefer_official_audio_track_leaves_non_omv_untouched(monkeypatch):
@@ -1833,7 +1864,7 @@ def test_prefer_official_audio_track_caches_swap_by_video_id(monkeypatch):
     monkeypatch.setattr(providers, '_ytm', _CountingYTM)
     for _ in range(3):
         video_id, duration = providers._prefer_official_audio_track(
-            'omv-id', 240, 'Song', ['Artist'], 'MUSIC_VIDEO_TYPE_OMV'
+            'omv-id', 202, 'Song', ['Artist'], 'MUSIC_VIDEO_TYPE_OMV'
         )
         assert video_id == 'atv-id'
         assert duration == 200
@@ -1871,7 +1902,7 @@ def test_album_track_song_prefers_official_audio(monkeypatch):
         'title': 'Song',
         'artists': [{'name': 'Artist'}],
         'trackNumber': 1,
-        'duration_seconds': 240,
+        'duration_seconds': 202,
         'isExplicit': False,
         'videoType': 'MUSIC_VIDEO_TYPE_OMV',
     }

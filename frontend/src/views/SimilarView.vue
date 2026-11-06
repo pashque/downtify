@@ -57,11 +57,12 @@
           {{ resultsTitle }}
         </h2>
         <div class="-mx-3 flex flex-col">
-          <TrackDownPlayHeader />
+          <TrackDownPlayHeader hide-album />
           <SimilarTrackRow
             v-for="(song, i) in similar.songs.value"
             :key="`${song.artist}|${song.name}`"
             :song="song"
+              :location="locationFor(song)"
             :index="i"
             :songs="similar.songs.value"
           />
@@ -102,6 +103,7 @@
 </template>
 
 <script setup>
+import { useLibraryLocations } from '/src/model/libraryLocations'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '/src/components/ui/AppIcon.vue'
@@ -123,6 +125,7 @@ const route = useRoute()
 const router = useRouter()
 const similar = useSimilar()
 const library = useLibrary()
+const { locationFor } = useLibraryLocations(computed(() => similar.songs.value))
 const player = usePlayer()
 
 const artistInput = ref(similar.artist.value)

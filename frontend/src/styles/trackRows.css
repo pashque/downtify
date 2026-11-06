@@ -1,0 +1,32 @@
+.source-track-grid, .library-track-grid {
+  --selection: ; --cover: 44px; --album: minmax(0, 1fr); --added: ; --format: 112px;
+  display: grid;
+  grid-template-columns: var(--selection) 24px var(--cover) minmax(0, 2fr) var(--album) 48px var(--format) var(--added) 112px 220px 32px 32px;
+  gap: 12px; align-items: center;
+}
+.library-track-grid { --cover: ; }
+.source-hide-album { --album: ; }
+.source-selectable { --selection: 18px; }
+.source-show-added { --added: 100px; }
+.source-track-grid > *, .library-track-grid > * { min-width: 0; }
+.source-download { display: flex; justify-content: center; }
+/* A clear gap between the right-aligned time and the format badge. */
+.source-format { padding-left: 16px; }
+.source-heart, .source-actions { display: flex; justify-content: center; }
+@media (max-width: 1279px) {
+  .source-track-grid, .library-track-grid { --album: ; --added: ; gap: 8px; grid-template-columns: var(--selection) 24px var(--cover) minmax(0, 1fr) 48px var(--format) 80px 100px 32px 32px; }
+  .source-album, .source-added { display: none; }
+}
+@media (max-width: 1023px) {
+  .source-track-grid, .library-track-grid { grid-template-columns: var(--selection) 24px var(--cover) minmax(0, 1fr) 48px 64px 64px 32px 32px; }
+  .source-format { display: none; }
+}
+@media (max-width: 639px) {
+  /* Phones: title, library check, heart, menu - no location badges. */
+  .source-track-grid, .library-track-grid { grid-template-columns: var(--selection) minmax(0, 1fr) 36px 28px 28px; gap: 6px; }
+  .source-number, .source-cover, .source-duration { display: none; }
+  .source-track-grid > .source-locations, .library-track-grid > .source-locations { display: none; }
+  .source-download > .w-28 { width: 36px; flex-wrap: wrap; gap: 0; }
+}
+
+.source-locations { display: flex; flex-wrap: wrap; gap: 4px; }

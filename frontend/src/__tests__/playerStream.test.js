@@ -81,6 +81,17 @@ describe('streaming in the player queue', () => {
     player = mod.usePlayer()
   })
 
+  it('does not reuse an unresolved queue for another source edition or punctuation-distinct artist', () => {
+    const first = { ...pending('Song'), song_id: 'one', provider: 'spotify' }
+    const second = { ...first, song_id: 'two' }
+    player.setPlaylist([first])
+    player.setPlaylist([second])
+    expect(player.playlist.value[0].song_id).toBe('two')
+    player.setPlaylist([{ ...pending('Song'), artist: '!!!' }])
+    player.setPlaylist([{ ...pending('Song'), artist: '+++' }])
+    expect(player.playlist.value[0].artist).toBe('+++')
+  })
+
   it('resolves an unstored track before playing it', async () => {
     player.playList([pending('B')])
     await vi.waitFor(() => {
@@ -89,6 +100,14 @@ describe('streaming in the player queue', () => {
     expect(audios.list[0].src).toBe('https://stream.example/B')
     expect(player.currentTrack.value.url).toBe('https://stream.example/B')
     expect(player.playError.value).toBe('')
+  })
+
+  it('keeps the resolved video id on the track, so the player can download it', async () => {
+    player.playList([pending('B'), pending('C')])
+    await vi.waitFor(() => {
+      expect(player.currentTrack.value.video_id).toBe('vid-B')
+      expect(player.playlist.value[1].video_id).toBe('vid-C')
+    })
   })
 
   it('keeps one track ahead resolved while the current one plays', async () => {

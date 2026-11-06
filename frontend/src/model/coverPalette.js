@@ -10,6 +10,9 @@ function loadPalette(url) {
   if (!cache.has(url)) {
     const job = new Promise((resolve) => {
       const img = new Image()
+      // Provider artwork must be CORS-readable for palette extraction. Same-
+      // origin covers still send their normal session cookies.
+      img.crossOrigin = 'anonymous'
       img.decoding = 'async'
       img.onload = () => {
         try {

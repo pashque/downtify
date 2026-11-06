@@ -40,11 +40,15 @@ const props = defineProps({
   photo: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
   to: { type: [String, Object], default: null },
+  // Optional icon size override in px (else it follows `size`).
+  iconPx: { type: Number, default: 0 },
 })
 
 const sizeClass = computed(
   () =>
     ({ sm: 'size-8', md: 'size-10', lg: 'size-11' })[props.size] || 'size-10'
 )
-const iconSize = computed(() => ({ sm: 16, md: 18, lg: 20 })[props.size] || 18)
+const iconSize = computed(
+  () => props.iconPx || ({ sm: 16, md: 18, lg: 20 })[props.size] || 18
+)
 </script>

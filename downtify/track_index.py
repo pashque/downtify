@@ -56,8 +56,28 @@ class TrackIndex:
     def _connect(self) -> sqlite3.Connection:
         return connect_sqlite(self._path, row_factory=True)
 
+    def album_preference(self, user_id: int, artist: str, title: str) -> Optional[str]:
+        from .resource_identity import exact_name_key
+        with self._connect() as conn:
+            row = conn.execute('SELECT edition FROM library_album_preferences WHERE user_id=? AND artist=? AND title=?',
+                               (user_id, exact_name_key(artist), exact_name_key(title))).fetchone()
+        return row['edition'] if row else None
+
+    def set_album_preference(self, user_id: int, artist: str, title: str, edition: str) -> None:
+        from .resource_identity import exact_name_key
+        if not _SPOTIFY_TRACK_ID.fullmatch(edition):
+            raise ValueError('Invalid Spotify album ID')
+        with self._connect() as conn:
+            conn.execute('INSERT OR REPLACE INTO library_album_preferences (user_id,artist,title,edition) VALUES (?,?,?,?)',
+                         (user_id, exact_name_key(artist), exact_name_key(title), edition))
+
     def _init_db(self) -> None:
         with self._connect() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS library_album_preferences (user_id INTEGER NOT NULL, artist TEXT NOT NULL, title TEXT NOT NULL, edition TEXT NOT NULL, PRIMARY KEY(user_id,artist,title))')
+            conn.execute('''CREATE TABLE IF NOT EXISTS library_source_copies (
+                spotify_track_id TEXT NOT NULL, filename TEXT NOT NULL,
+                full_path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
+                PRIMARY KEY (spotify_track_id, filename))''')
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS library_tracks (
                     spotify_track_id TEXT PRIMARY KEY,
@@ -77,6 +97,65 @@ class TrackIndex:
                 ON library_tracks (content_key)
                 WHERE content_key IS NOT NULL
             """)
+
+    def register_source_copy(self, song: dict[str, Any], filename: str, full_path: Path) -> None:
+        """Internal only: bind a fingerprint-verified local copy to a source ID.
+
+        Separate from canonical download provenance: playlist and album copies
+        coexist, and changed/deleted files immediately lose the recovered claim.
+        """
+        tid = normalize_spotify_track_id(song)
+        path = Path(full_path)
+        if not tid or not filename or not path.is_file():
+            return
+        stat = path.stat()
+        with self._connect() as conn:
+            conn.execute('''INSERT OR REPLACE INTO library_source_copies
+                            (spotify_track_id, filename, full_path, size, mtime_ns)
+                            VALUES (?, ?, ?, ?, ?)''',
+                         (tid, filename, str(path.resolve()), stat.st_size, stat.st_mtime_ns))
+
+    def source_copies_for_song(self, song: dict[str, Any]) -> list[str]:
+        tid = normalize_spotify_track_id(song)
+        if not tid:
+            return []
+        with self._connect() as conn:
+            rows = conn.execute('SELECT * FROM library_source_copies WHERE spotify_track_id = ? ORDER BY filename', (tid,)).fetchall()
+        found = []
+        for row in rows:
+            try:
+                path = Path(row['full_path'])
+                stat = path.stat()
+                if path.is_file() and (stat.st_size, stat.st_mtime_ns) == (row['size'], row['mtime_ns']):
+                    found.append(str(row['filename']))
+            except OSError:
+                pass
+        return found
+
+    def identities_for_files(self, filenames: set[str]) -> dict[str, set[str]]:
+        """Batch reverse provenance, including stat-validated recovered copies.
+
+        Only caller-selected visible files are returned. No source requests or
+        writes are performed; changed recovered files immediately lose identity.
+        """
+        found: dict[str, set[str]] = {}
+        with self._connect() as conn:
+            canonical = conn.execute('SELECT spotify_track_id, filename FROM library_tracks').fetchall()
+            recovered = conn.execute('SELECT * FROM library_source_copies').fetchall()
+        for row in canonical:
+            if row['filename'] in filenames:
+                found.setdefault(row['filename'], set()).add(row['spotify_track_id'])
+        for row in recovered:
+            if row['filename'] not in filenames:
+                continue
+            try:
+                path = Path(row['full_path'])
+                stat = path.stat()
+                if path.is_file() and (stat.st_size, stat.st_mtime_ns) == (row['size'], row['mtime_ns']):
+                    found.setdefault(row['filename'], set()).add(row['spotify_track_id'])
+            except OSError:
+                pass
+        return found
 
     def lookup(self, spotify_track_id: str) -> Optional[str]:
         tid = str(spotify_track_id or '').strip()
@@ -286,6 +365,20 @@ def resolve_existing_download(
 
     download_dir = Path(downloader.download_dir)
     slskd_dir = slskd_dir_from_downloader(downloader)
+
+    from .download_destination import managed_destination
+
+    if managed_destination(downloader) or song.get('downtify_destination') == 'album':
+        from .download_destination import verified_destination_copy
+        local = (downloader.existing_filename_for(song, subdir=subdir)
+                 or verified_destination_copy(downloader, song, subdir, track_index))
+        if local and locate_library_file(local, download_dir, slskd_dir):
+            if track_index is not None:
+                track_index.register_song(song, local, full_path=locate_library_file(local, download_dir, slskd_dir))
+            return local, 'Already at destination'
+        # A valid indexed copy elsewhere must remain indexed, but must not
+        # suppress a missing destination in an album or a separate playlist.
+        return None
 
     if track_index is not None:
         tid = normalize_spotify_track_id(song)

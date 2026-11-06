@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import math
 import os
 import re
 import shutil
@@ -371,6 +372,8 @@ class Downloader:
         audio_providers: Optional[list[str]] = None,
         slskd_settings: Optional[dict[str, Any]] = None,
         max_track_duration_seconds: int = MAX_TRACK_DURATION_SECONDS,
+        folder_structure: Optional[bool] = None,
+        playlist_use_library: bool = True,
     ):
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -391,6 +394,8 @@ class Downloader:
         self.lyrics_cache = lyrics_cache
         self.organize_by_artist = organize_by_artist
         self.organize_by_album = organize_by_album
+        self.folder_structure = folder_structure
+        self.playlist_use_library = playlist_use_library
         self.overwrite_existing_files = overwrite_existing_files
         self.download_cover_art = download_cover_art
         # ``0``: overlong tracks are taken, like unknown durations.
@@ -532,20 +537,33 @@ class Downloader:
 
     @staticmethod
     def _artist_subdir(song: dict[str, Any]) -> str:
-        # Prefer the source's own album-level artist (set for YouTube
-        # Music albums) so every track in an album lands in the same
-        # folder even when one track's own `artists` differs (a feature,
-        # a remix credit, ...) — mirrors the album-artist tag fallback in
-        # `embed_metadata`.
+        # Linux permits punctuation including trailing dots, colons, * and ?.
+        # Only separators/NUL are removed from source text for path components.
+        def component(value: Any) -> str:
+            text = str(value or '').replace('/', '').replace('\x00', '')
+            return '%2E' * len(text) if text in {'.', '..'} else text or 'unknown'
+
         album_artist = (song.get('album_artist') or '').strip()
         if album_artist:
-            return _sanitize(album_artist)
+            return component(album_artist)
         artists = song.get('artists') or []
-        return _sanitize(artists[0] if artists else 'unknown')
+        return component(artists[0] if artists else 'unknown')
 
     @staticmethod
     def _album_subdir(song: dict[str, Any]) -> str:
-        return _sanitize(song.get('album_name') or 'unknown')
+        text = str(song.get('album_name') or 'unknown').replace('/', '').replace('\x00', '')
+        return '%2E' * len(text) if text in {'.', '..'} else text or 'unknown'
+
+    @property
+    def uses_shared_playlist_storage(self) -> bool:
+        """Whether playlist audio lives outside its own playlist folder."""
+        if isinstance(self.folder_structure, bool):
+            # With structure off, the playlist switch instead controls
+            # whether playlist audio gets its own flat folder.
+            if self.folder_structure:
+                return self.playlist_use_library
+            return not self.playlist_use_library
+        return self.organize_by_artist or self.organize_by_album
 
     def _effective_subdir(
         self, song: dict[str, Any], fallback: Optional[str]
@@ -559,6 +577,11 @@ class Downloader:
         unchanged.
         """
 
+        if song.get('downtify_destination') == 'album':
+            return None
+        if isinstance(self.folder_structure, bool):
+            return fallback if not self.uses_shared_playlist_storage else None
+
         parts: list[str] = []
         if self.organize_by_artist:
             parts.append(self._artist_subdir(song))
@@ -566,6 +589,12 @@ class Downloader:
             parts.append(self._album_subdir(song))
         if parts:
             return '/'.join(parts)
+        # An explicit album-artist hierarchy is library-relative, even
+        # when the caller supplies a playlist folder as its fallback.
+        if '{albumartist}' in self.output_template and any(
+            sep in self.output_template for sep in ('/', '\\')
+        ):
+            return None
         return fallback
 
     def _save_album_cover(
@@ -602,7 +631,12 @@ class Downloader:
 
     @staticmethod
     def _template_values(song: dict[str, Any]) -> dict[str, str]:
-        artist_names = [_sanitize(a) for a in (song.get('artists') or [])]
+        # Slash and NUL cannot occur inside a Linux path component. Match
+        # the original Downtify policy and remove them only from the path.
+        def path_value(value: str) -> str:
+            return str(value or '').replace('/', '').replace('\x00', '')
+
+        artist_names = [path_value(a) for a in (song.get('artists') or [])]
         artists = ', '.join(a for a in artist_names if a) or 'Unknown Artist'
         # Same normalization used for the embedded tag (see
         # _album_track_index_for_tags): only a positive integer counts,
@@ -618,26 +652,42 @@ class Downloader:
         date = _recording_date_for_tags(song)
         year = date[:4] if date[:4].isdigit() else ''
         return {
-            'title': _sanitize(song.get('name', 'Unknown')),
+            'title': path_value(song.get('name', 'Unknown')),
             'artists': artists,
             'artist': artists,
-            'album': _sanitize(song.get('album_name', '')),
+            # Preserve the authoritative album artist as a whole name.
+            'albumartist': path_value(
+                str(song.get('album_artist') or '')
+                or next((a for a in (song.get('artists') or []) if a), 'Unknown Artist')
+            ),
+            'album': path_value(song.get('album_name', '')),
             'tracknumber': f'{track_number:02d}' if track_number else '',
             'year': year,
         }
 
-    def _format_output_parts(self, song: dict[str, Any]) -> list[str]:
+    def _format_output_parts(
+        self, song: dict[str, Any], subdir: Optional[str] = None
+    ) -> list[str]:
         """Render the output template as safe relative path components."""
 
         template = self.output_template.replace('.{output-ext}', '')
+        if song.get('downtify_destination') == 'album':
+            from .folder_settings import STRUCTURED_OUTPUT
+            template = STRUCTURED_OUTPUT.replace('.{output-ext}', '')
+        elif isinstance(self.folder_structure, bool) and (
+            not self.folder_structure
+            or (subdir is not None and not self.playlist_use_library)
+        ):
+            template = '{artists} - {title}'
+        values = self._template_values(song)
         try:
-            rendered = template.format(**self._template_values(song))
+            # Split the template, not the rendered values: a backslash inside
+            # a Spotify name is a valid Linux filename character.
+            parts = [part.format(**values) for part in re.split(r'[\\/]+', template)]
         except (KeyError, IndexError):
-            values = self._template_values(song)
-            rendered = f'{values["artists"]} - {values["title"]}'
-
-        parts = [_sanitize(part) for part in re.split(r'[\\/]+', rendered)]
-        parts = [part for part in parts if part]
+            parts = [f'{values["artists"]} - {values["title"]}']
+        parts = [('%2E' * len(part)) if part in {'.', '..'} else part
+                 for part in parts if part]
         return parts or ['unknown']
 
     def _format_basename(self, song: dict[str, Any]) -> str:
@@ -661,9 +711,12 @@ class Downloader:
         """
 
         target_dir, prefix, basename = self._expected_location(song, subdir)
-        primary = target_dir / f'{basename}.{self.audio_format}'
-        if primary.exists():
+        fmt = song.get('downtify_audio_format') or self.audio_format
+        primary = target_dir / f'{basename}.{fmt}'
+        if primary.is_file():
             return f'{prefix}{primary.name}'
+        # An explicit format is a separate download, not any playable copy.
+        requested_format = song.get('downtify_audio_format')
         # Not a glob: titles like "Song [Live]" are glob character classes.
         if target_dir.is_dir():
             for candidate in sorted(target_dir.iterdir()):
@@ -672,6 +725,7 @@ class Downloader:
                     dot
                     and stem == basename
                     and ext.lower() in _AUDIO_EXTENSIONS
+                    and (not requested_format or ext.lower() == requested_format)
                     and candidate.is_file()
                 ):
                     return f'{prefix}{candidate.name}'
@@ -683,7 +737,7 @@ class Downloader:
         """``(target_dir, relative_prefix, basename)`` a download of
         ``song`` lands at - no disk access."""
 
-        output_parts = self._format_output_parts(song)
+        output_parts = self._format_output_parts(song, subdir)
         basename = output_parts[-1]
         output_subdir = (
             Path(*output_parts[:-1]) if len(output_parts) > 1 else None
@@ -724,6 +778,11 @@ class Downloader:
         exact = self.existing_filename_for(song, subdir)
         if exact is not None:
             return exact
+        # Managed storage deliberately permits separate playlist/album
+        # copies; only the requested destination satisfies this download.
+        if (type(self.folder_structure) is bool or song.get('downtify_destination') == 'album'
+                or song.get('downtify_audio_format')):
+            return None
         wanted = [p.casefold() for p in self._format_output_parts(song)]
         return self._scan_library(wanted[-1], wanted[:-1])
 
@@ -759,7 +818,13 @@ class Downloader:
 
         if not (song.get('name') and song.get('artists')):
             return False
-        template = self.output_template
+        forced_album = song.get('downtify_destination') == 'album'
+        if self.folder_structure is False and not forced_album:
+            return True
+        if (self.folder_structure is True or forced_album) and not song.get('album_artist'):
+            return False
+        from .folder_settings import STRUCTURED_OUTPUT
+        template = STRUCTURED_OUTPUT if forced_album else self.output_template
         if (self.organize_by_album or '{album}' in template) and not song.get(
             'album_name'
         ):
@@ -770,8 +835,11 @@ class Downloader:
                 return False
         return True
 
-    def _target_lock(self, song: dict[str, Any]) -> threading.Lock:
-        key = '/'.join(p.casefold() for p in self._format_output_parts(song))
+    def _target_lock(
+        self, song: dict[str, Any], subdir: Optional[str] = None
+    ) -> threading.Lock:
+        key = '/'.join(p.casefold() for p in self._format_output_parts(song, subdir))
+        key = f'{self._effective_subdir(song, subdir) or ""}/{key}'
         with self._target_locks_guard:
             return self._target_locks.setdefault(key, threading.Lock())
 
@@ -799,6 +867,7 @@ class Downloader:
         parts = [
             sanitize_playlist_name(p) for p in subdir.split('/') if p.strip()
         ]
+        parts = [('%2E' * len(p)) if p in {'.', '..'} else p for p in parts]
         if not parts:
             return self.download_dir, ''
         rel = '/'.join(parts)
@@ -822,7 +891,8 @@ class Downloader:
         returned instead (see :meth:`find_existing_download`).
         """
 
-        skip_existing = not self.overwrite_existing_files
+        from .download_destination import skip_existing_for
+        skip_existing = skip_existing_for(song, self.overwrite_existing_files)
         if skip_existing and self._can_resolve_path_early(song):
             existing = self.find_existing_download(song, subdir)
             if existing is not None:
@@ -874,6 +944,16 @@ class Downloader:
         reject_overlong_song(song, self.max_track_duration_seconds)
 
         if local_source is not None:
+            if skip_existing and song.get('downtify_destination') == 'album':
+                with self._target_lock(song, subdir):
+                    existing = self.find_existing_download(song, subdir)
+                    if existing is not None:
+                        return self._skip_existing(existing, progress_cb)
+                    return self._downloaded(
+                        song, self._finalize_local_source(
+                            song, local_source, provider, progress_cb, subdir
+                        ),
+                    )
             return self._downloaded(
                 song,
                 self._finalize_local_source(
@@ -894,7 +974,7 @@ class Downloader:
         # two downloads of the same song running at once — a duplicate row
         # in one playlist, or two playlists sharing a track — can't both
         # miss the check and fetch it twice.
-        with self._target_lock(song):
+        with self._target_lock(song, subdir):
             existing = self.find_existing_download(song, subdir)
             if existing is not None:
                 return self._skip_existing(existing, progress_cb)
@@ -928,7 +1008,7 @@ class Downloader:
         output template adds, and creates the directory.
         """
 
-        output_parts = self._format_output_parts(song)
+        output_parts = self._format_output_parts(song, subdir)
         basename = output_parts[-1]
         output_subdir = (
             Path(*output_parts[:-1]) if len(output_parts) > 1 else None
@@ -994,14 +1074,33 @@ class Downloader:
         folder and is returned with the virtual ``slskd/`` prefix (served
         via ``/media/slskd/...``); otherwise it's copied into the same
         destination a YouTube download would use, keeping its original
-        format — slskd files are not transcoded.
+        format. Explicit per-request formats instead produce a separate
+        library copy, transcoding only when its container differs.
         """
+
+        expected_duration = self._automatic_target_duration(song)
+        if expected_duration is not None:
+            self._validate_audio_duration(source_path, expected_duration)
+        requested_format = song.get('downtify_audio_format')
+        if requested_format and source_path.suffix.lower() != '.' + requested_format:
+            from tempfile import TemporaryDirectory
+            with TemporaryDirectory(prefix='.downtify-audio-', dir=self.download_dir) as staging:
+                staged = Path(staging) / ('source' + source_path.suffix)
+                shutil.copy2(source_path, staged)
+                _removals, info = _ExtractAudioPP(None, requested_format, self.audio_bitrate).run({
+                    'filepath': str(staged), 'ext': source_path.suffix.lstrip('.').lower(),
+                    'vcodec': 'none',
+                })
+                return self._finalize_local_source(song, Path(info['filepath']), provider,
+                                                   progress_cb, subdir)
 
         lookups = _MetadataLookups(self, song)
         try:
-            if provider == 'slskd' and self.slskd_settings.get(
-                'leave_in_place', True
-            ):
+            if (song.get('downtify_destination') != 'album'
+                    and not requested_format
+                    and provider == 'slskd' and self.slskd_settings.get(
+                        'leave_in_place', True
+                    )):
                 final_path = source_path
                 target_dir = source_path.parent
                 stored = library_stored_path(
@@ -1147,7 +1246,75 @@ class Downloader:
 
         return ydl_opts, bool(cookies_file or cookies_browser)
 
+    @staticmethod
+    def _automatic_target_duration(song: dict[str, Any]) -> Optional[float]:
+        """Known catalog length for automatic matching, not a manual video pick."""
+        if song.get('youtube_id') or song.get('replace'):
+            return None
+        source = str(song.get('source') or '')
+        url = str(song.get('url') or '')
+        if source not in {'spotify', 'deezer'} and not url.startswith((
+            'https://open.spotify.com/', 'https://www.deezer.com/',
+            'https://deezer.com/',
+        )):
+            return None
+        try:
+            duration = float(song.get('duration') or 0)
+        except (TypeError, ValueError):
+            return None
+        return duration if math.isfinite(duration) and duration > 0 else None
+
+    @staticmethod
+    def _validate_audio_duration(path: Path, expected: float) -> None:
+        """Measure staged audio before it can replace any library recording."""
+        from mutagen import File
+
+        try:
+            audio = File(path)
+            actual = float(audio.info.length) if audio is not None else 0
+        except Exception as exc:
+            raise RuntimeError('Could not verify downloaded audio duration; file not saved') from exc
+        if not math.isfinite(actual) or actual <= 0:
+            raise RuntimeError('Could not verify downloaded audio duration; file not saved')
+        if abs(actual - expected) > 10:
+            raise RuntimeError(
+                f'Wrong audio version: expected {expected:.1f}s, '
+                f'downloaded {actual:.1f}s; file not saved'
+            )
+
     def fetch_audio(
+        self,
+        video_id: str,
+        target_dir: Path,
+        basename: str,
+        *,
+        song: dict[str, Any],
+        progress_cb: Optional[ProgressCallback] = None,
+        provider: Optional[str] = None,
+        audio_format: Optional[str] = None,
+    ) -> Path:
+        """Isolate conversions and validate automatic matches before publishing."""
+        fmt = audio_format or song.get('downtify_audio_format') or self.audio_format
+        expected_duration = self._automatic_target_duration(song)
+        if not song.get('downtify_audio_format') and expected_duration is None:
+            return self._fetch_audio(video_id, target_dir, basename, song=song,
+                                     progress_cb=progress_cb, provider=provider,
+                                     audio_format=audio_format)
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory(prefix='.downtify-audio-', dir=target_dir) as staging:
+            produced = self._fetch_audio(video_id, Path(staging), basename, song=song,
+                                         progress_cb=progress_cb, provider=provider,
+                                         audio_format=fmt)
+            expected = Path(staging) / f'{basename}.{fmt}'
+            if produced != expected or not expected.is_file():
+                raise RuntimeError(f'Audio conversion did not produce requested {fmt} output')
+            if expected_duration is not None:
+                self._validate_audio_duration(expected, expected_duration)
+            destination = target_dir / expected.name
+            os.replace(expected, destination)
+            return destination
+
+    def _fetch_audio(
         self,
         video_id: str,
         target_dir: Path,
@@ -1163,10 +1330,17 @@ class Downloader:
         format) and return the file - untagged. *song* only words the
         error when it fails."""
 
-        fmt = audio_format or self.audio_format
-        out_template = str(target_dir / f'{basename}.%(ext)s')
+        fmt = audio_format or song.get('downtify_audio_format') or self.audio_format
+        # yt-dlp treats %(...)s as output-template fields, even when that
+        # sequence came from a literal Spotify title. Its template syntax
+        # uses %% for a literal percent sign.
+        escaped_basename = basename.replace('%', '%%')
+        escaped_dir = str(target_dir).replace('%', '%%')
+        out_template = f'{escaped_dir}/{escaped_basename}.%(ext)s'
         hook = self._progress_hook(progress_cb, provider)
         ydl_opts, has_cookies = self._ydl_options(out_template, hook)
+        # This private request hint is never a yt-dlp option.
+        fmt = ydl_opts.pop('downtify_audio_format', None) or fmt
         url = f'https://music.youtube.com/watch?v={video_id}'
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -1185,10 +1359,15 @@ class Downloader:
         final_path = target_dir / f'{basename}.{fmt}'
         if not final_path.exists():
             # yt-dlp sometimes uses the upstream extension for opus/m4a
-            for candidate in target_dir.glob(f'{basename}.*'):
-                if candidate.is_file():
+            valid_audio_exts = {'.mp3', '.m4a', '.opus', '.ogg', '.flac', '.wav', '.aac', '.wma'}
+            for candidate in target_dir.iterdir():
+                stem, sep, ext = candidate.name.rpartition('.')
+                if (sep and stem == basename and ext.lower() in {e[1:] for e in valid_audio_exts}
+                        and candidate.is_file()):
                     final_path = candidate
                     break
+            else:
+                raise FileNotFoundError(f'yt-dlp completed without producing audio for {basename!r}')
         return final_path
 
     def _fetch_and_tag(
@@ -1577,7 +1756,11 @@ def _tag_mp3(
     audio.tags.delall('APIC')
     audio.tags.add(TIT2(encoding=3, text=title))
     if artists:
-        audio.tags.add(TPE1(encoding=3, text='; '.join(artists)))
+        # Display: "A, B"; the exact list goes in ARTISTS (Picard convention)
+        # so literal comma names stay intact.
+        audio.tags.delall('TXXX:ARTISTS')
+        audio.tags.add(TPE1(encoding=3, text=', '.join(artists)))
+        audio.tags.add(TXXX(encoding=3, desc='ARTISTS', text=list(artists)))
     if album_artist:
         audio.tags.add(TPE2(encoding=3, text=album_artist))
     if album:
@@ -1652,7 +1835,8 @@ def _tag_mp4(
     audio = MP4(str(path))
     audio['\xa9nam'] = title
     if artists:
-        audio['\xa9ART'] = artists
+        audio['\xa9ART'] = [', '.join(artists)]
+        audio['----:com.apple.iTunes:ARTISTS'] = [MP4FreeForm(a.encode('utf-8')) for a in artists]
     if album_artist:
         audio['aART'] = [album_artist]
     if album:
@@ -1696,7 +1880,8 @@ def _tag_flac(
     audio = FLAC(str(path))
     audio['title'] = title
     if artists:
-        audio['artist'] = artists
+        audio['artist'] = ', '.join(artists)
+        audio['artists'] = list(artists)
     if album_artist:
         audio['albumartist'] = album_artist
     if album:
@@ -1805,7 +1990,8 @@ def _apply_vorbis_comments(
 ):
     audio['title'] = title
     if artists:
-        audio['artist'] = artists
+        audio['artist'] = ', '.join(artists)
+        audio['artists'] = list(artists)
     if album_artist:
         audio['albumartist'] = album_artist
     if album:

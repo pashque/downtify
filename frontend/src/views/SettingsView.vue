@@ -274,63 +274,7 @@
             </SettingGroup>
 
             <SettingGroup :title="t('settings.filesGroup')">
-              <SettingRow
-                :label="t('settings.template')"
-                :description="t('settings.templateHint')"
-                stacked
-              >
-                <div class="flex w-full flex-col gap-2">
-                  <div class="flex gap-2">
-                    <UiInput
-                      v-model.trim="s.output"
-                      class="flex-1"
-                      :placeholder="sm.settingsOptions.output"
-                      mono
-                    />
-                    <UiButton
-                      variant="ghost"
-                      @click="s.output = sm.settingsOptions.output"
-                    >
-                      {{ t('settings.reset') }}
-                    </UiButton>
-                  </div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="token in templateTokens"
-                      :key="token"
-                      type="button"
-                      class="rounded-md border border-line-3 bg-surface-2 px-2 py-1 font-mono text-xs text-fg-3 hover:border-accent hover:text-accent"
-                      @click="addToken(token)"
-                    >
-                      {{ token }}
-                    </button>
-                  </div>
-                  <p class="text-xs text-muted">
-                    {{ t('settings.templatePreview') }}
-                    <span class="font-mono text-fg-3">{{
-                      templatePreview
-                    }}</span>
-                  </p>
-                </div>
-              </SettingRow>
-              <SettingRow
-                :label="t('settings.byArtist')"
-                :description="t('settings.byArtistHint')"
-              >
-                <UiSwitch
-                  v-model="s.organize_by_artist"
-                  :aria-label="t('settings.byArtist')"
-                />
-              </SettingRow>
-              <SettingRow
-                :label="t('settings.byAlbum')"
-                :description="t('settings.byAlbumHint')"
-              >
-                <UiSwitch
-                  v-model="s.organize_by_album"
-                  :aria-label="t('settings.byAlbum')"
-                />
-              </SettingRow>
+              <FileDestinationSettings :settings="s" />
               <SettingRow
                 :label="t('settings.overwrite')"
                 :description="t('settings.overwriteHint')"
@@ -820,6 +764,8 @@ import ServerPortSetting from '/src/components/settings/ServerPortSetting.vue'
 import HiddenLibrarySettings from '/src/components/settings/HiddenLibrarySettings.vue'
 import UsersSettings from '/src/components/settings/UsersSettings.vue'
 import SettingGroup from '/src/components/settings/SettingGroup.vue'
+import FileDestinationSettings from '/src/components/settings/FileDestinationSettings.vue'
+import { defaultOutput } from '/src/lib/fileTemplates'
 import SettingRow from '/src/components/settings/SettingRow.vue'
 import SourceOrder from '/src/components/settings/SourceOrder.vue'
 import LyricsOrder from '/src/components/settings/LyricsOrder.vue'
@@ -922,44 +868,9 @@ function needsValue(value) {
   return String(value ?? '').trim() ? '' : t('settings.required')
 }
 
-const templateTokens = [
-  '{artists}',
-  '{artist}',
-  '{title}',
-  '{album}',
-  '{tracknumber}',
-  '{year}',
-  '/',
-]
-
-function addToken(token) {
-  const current = String(s.value.output || sm.settingsOptions.output)
-  const extIndex = current.lastIndexOf('.{output-ext}')
-  const base = extIndex >= 0 ? current.slice(0, extIndex) : current
-  const sep = token === '/' || base.endsWith('/') ? '' : ' - '
-  s.value.output = `${base}${base ? sep : ''}${token}.{output-ext}`
-}
-
-const templatePreview = computed(() => {
-  const template = String(s.value.output || sm.settingsOptions.output)
-  const values = {
-    '{artists}': 'Kenji Aoki, Mira Kovač',
-    '{artist}': 'Kenji Aoki',
-    '{title}': 'Harbor Lights',
-    '{album}': 'Glass Harbor',
-    '{tracknumber}': '01',
-    '{year}': '2025',
-    '{output-ext}': s.value.format || 'mp3',
-  }
-  return Object.entries(values).reduce(
-    (text, [token, value]) => text.split(token).join(value),
-    template
-  )
-})
-
 async function save() {
   if (!String(s.value.output || '').trim())
-    s.value.output = sm.settingsOptions.output
+    s.value.output = defaultOutput(s.value)
   const ok = await sm.saveSettings()
   if (ok) ui.toast(t('settings.saved'), { kind: 'success' })
 }

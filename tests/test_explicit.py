@@ -82,8 +82,9 @@ def test_each_format_uses_the_tag_players_and_servers_read(tmp_path):
         embed_metadata(path, {**SONG, 'explicit': True}, download_cover=False)
 
     frames = ID3(str(mp3)).getall('TXXX')
-    assert [(f.desc, list(f.text)) for f in frames] == [
-        ('ITUNESADVISORY', ['1'])
+    # ARTISTS carries the structured artist list next to the ", " display tag.
+    assert sorted((f.desc, list(f.text)) for f in frames) == [
+        ('ARTISTS', ['Artist']), ('ITUNESADVISORY', ['1'])
     ]
     assert MP4(str(m4a)).tags['rtng'] == [1]
     assert MutagenFile(str(flac)).tags['ITUNESADVISORY'] == ['1']

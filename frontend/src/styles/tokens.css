@@ -182,6 +182,14 @@
     outline-offset: 2px;
   }
 
+  /* Player controls: no accent ring (Space is play/pause there, not a
+     click); a keyboard user still sees a soft round background. */
+  [data-mini-bar] :focus-visible,
+  [data-now-playing] :focus-visible {
+    outline: none;
+    background-color: rgb(128 128 128 / 0.18);
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--c-line-3) transparent;

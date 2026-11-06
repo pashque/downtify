@@ -27,6 +27,7 @@
         :autocomplete="autocomplete"
         :readonly="readonly"
         :aria-readonly="readonly ? 'true' : undefined"
+        :aria-label="ariaLabel || undefined"
         :spellcheck="false"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="error || hint ? noteId : undefined"
@@ -66,6 +67,7 @@ import { useI18n } from '/src/i18n'
 const props = defineProps({
   modelValue: { type: [String, Number], default: '' },
   label: { type: String, default: '' },
+  ariaLabel: { type: String, default: '' },
   hint: { type: String, default: '' },
   error: { type: String, default: '' },
   placeholder: { type: String, default: '' },

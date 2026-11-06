@@ -3,7 +3,9 @@
     <UiIconButton
       :icon="icon"
       :label="player.isMuted.value ? t('player.unmute') : t('player.mute')"
-      size="sm"
+      :size="buttonSize"
+      round
+      :icon-px="iconPx"
       @click="player.toggleMute()"
     />
     <SliderBar
@@ -29,6 +31,8 @@ import { useI18n } from '/src/i18n'
 
 defineProps({
   width: { type: String, default: 'w-24' },
+  buttonSize: { type: String, default: 'sm' },
+  iconPx: { type: Number, default: 0 },
   trackClass: { type: String, default: 'bg-raised' },
   fillClass: { type: String, default: 'bg-fg-3 group-hover:bg-accent' },
   thumbClass: { type: String, default: 'bg-fg' },

@@ -68,7 +68,8 @@ from typing import Any, Optional
 from loguru import logger
 
 from . import deezer, spotify
-from .file_naming import file_name_key, title_key
+from .file_naming import file_name_key
+from .resource_identity import exact_name_key
 from .sqlite_utils import connect_sqlite
 
 #: How long a seed's related artists are trusted before asking Deezer again.
@@ -112,12 +113,8 @@ def _now() -> datetime:
 
 
 def artist_key(name: str) -> str:
-    """The key two names of the same artist share: case, spaces and the
-    characters a file name can't hold are ignored, so ``AC/DC`` in a tag
-    and ``ACDC`` on Deezer are the same artist (see
-    :func:`downtify.file_naming.file_name_key`)."""
-
-    return file_name_key(str(name or ''))
+    """Punctuation-preserving name identity; filesystem spelling is not ID."""
+    return exact_name_key(name)
 
 
 def _parse_time(value: Any) -> Optional[datetime]:
@@ -743,11 +740,9 @@ class DiscoverStore:
 
 
 def album_key(artist: str, title: str) -> str:
-    """The key an album is known by across services: its artist's
-    :func:`artist_key` and its :func:`~downtify.file_naming.title_key`, so
-    ``Dummy (Deluxe Edition)`` on Spotify is the ``Dummy`` on disk."""
-
-    return f'{artist_key(artist)}|{title_key(title)}'
+    """Exact fallback release identity; never strip Deluxe, + or symbols."""
+    # JSON separates components even when a resource name itself contains |.
+    return json.dumps([artist_key(artist), exact_name_key(title)], ensure_ascii=False)
 
 
 def _album_item(

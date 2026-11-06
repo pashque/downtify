@@ -3,7 +3,9 @@ links, related artists and platform ids.
 
 Photo/banner are saved as flat sidecar files under the download
 directory's ``.metadata`` folder (``ArtistImage`` / ``ArtistBannerImage``),
-named after the artist - the same idea as
+named by a punctuation-preserving artist identity hash. Legacy artwork
+is used in place only when its legacy profile's stored name proves ownership
+- the same idea as
 :func:`downtify.downloader.save_playlist_cover` saving a playlist's cover
 next to its M3U. There is no database row: whether the file exists on
 disk is the source of truth. The download directory is already served at
@@ -55,7 +57,6 @@ from loguru import logger
 
 from . import apple_music, deezer, providers, spotify
 from .downloader import _sanitize
-from .file_naming import file_name_key
 from .image_size import image_dimensions
 from .podcasts import strip_html
 
@@ -94,11 +95,16 @@ _IMAGE_FETCH_TIMEOUT = 20
 def image_path_for(download_dir: Path, name: str, kind: str) -> Path:
     """Sidecar file for *name*'s photo/banner, whether or not it exists."""
 
-    return (
-        Path(download_dir)
-        / _DIRNAMES[kind]
-        / f'{_sanitize(name)}{_SUFFIXES[kind]}'
-    )
+    path = _hashed_sidecar_path(download_dir, _DIRNAMES[kind], name, _SUFFIXES[kind])
+    if path.is_file():
+        return path
+    legacy = Path(download_dir) / _DIRNAMES[kind] / f'{_sanitize(name)}{_SUFFIXES[kind]}'
+    # Only the old profile can attest ownership of an old sanitized image.
+    # A newly created hashed profile must not claim another artist's artwork.
+    profile = Path(download_dir) / _PROFILE_DIRNAME / f'{_sanitize(name)}.json'
+    if legacy.is_file() and _stored_name_matches(profile, name):
+        return legacy
+    return path
 
 
 def image_url_for(download_dir: Path, name: str, kind: str) -> Optional[str]:
@@ -230,8 +236,45 @@ def delete_image(download_dir: Path, name: str, kind: str) -> bool:
 # ── Profile data: bio, social links, related artists, platform ids ──
 
 
+def _artist_identity(name: str) -> str:
+    import unicodedata
+    return ' '.join(unicodedata.normalize('NFKC', name).lower().split())
+
+
+def _stored_name_matches(path: Path, name: str) -> bool:
+    try:
+        return _data_name_matches(json.loads(path.read_text(encoding='utf-8')), name)
+    except (OSError, ValueError):
+        return False
+
+
+def _data_name_matches(data: Any, name: str) -> bool:
+    return (isinstance(data, dict) and isinstance(data.get('name'), str)
+            and _artist_identity(data['name']) == _artist_identity(name))
+
+
+def _hashed_sidecar_path(download_dir: Path, dirname: str, name: str, suffix: str) -> Path:
+    import hashlib
+    identity = _artist_identity(name)
+    digest = hashlib.sha256(identity.encode('utf-8')).hexdigest()
+    return Path(download_dir) / dirname / f'{_sanitize(identity)[:32]}--{digest}{suffix}'
+
+
+def _identity_sidecar_path(download_dir: Path, dirname: str, name: str, suffix: str) -> Path:
+    """Collision-safe new files; reuse legacy JSON only with verified ownership.
+
+    Never move/delete legacy files; attested custom art stays in place.
+    Ambiguous or nameless legacy JSON is left untouched rather than reassigned.
+    """
+    path = _hashed_sidecar_path(download_dir, dirname, name, suffix)
+    if path.is_file():
+        return path
+    legacy = Path(download_dir) / dirname / f'{_sanitize(name)}{suffix}'
+    return legacy if _stored_name_matches(legacy, name) else path
+
+
 def _profile_path_for(download_dir: Path, name: str) -> Path:
-    return Path(download_dir) / _PROFILE_DIRNAME / f'{_sanitize(name)}.json'
+    return _identity_sidecar_path(download_dir, _PROFILE_DIRNAME, name, '.json')
 
 
 def _default_profile(name: str) -> dict[str, Any]:
@@ -279,7 +322,7 @@ def load_profile(download_dir: Path, name: str) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError):
         return default
-    if not isinstance(data, dict):
+    if not _data_name_matches(data, name):
         return default
     merged = {**default, **data}
     platforms = dict(data.get('platforms_id') or {})
@@ -305,6 +348,10 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
             json.dump(data, handle, ensure_ascii=False, indent=2)
+        # Profiles hold public facts (bio, links, ids): readable like the
+        # music beside them, so host tools can inspect them.
+        with contextlib.suppress(OSError):
+            os.chmod(tmp, 0o644)
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -754,6 +801,93 @@ def resolve_spotify_artist_id(
     return _spotify_id_from_name(name) if name.strip() else None
 
 
+_RELINK_EVERY = timedelta(hours=24)
+
+
+def _name_key(value: str) -> str:
+    return ''.join(c for c in str(value or '').casefold() if c.isalnum())
+
+
+def _local_track_facts(download_dir: Path, filename: str) -> Optional[dict[str, Any]]:
+    """Title and length of a library file from its own tags (read only)."""
+    try:
+        from mutagen import File
+        path = Path(download_dir) / str(filename).replace('\\', '/')
+        audio = File(path, easy=True)
+        if audio is None:
+            return None
+        title = str((audio.tags or {}).get('title', [''])[0]).strip()
+        duration = float(getattr(audio.info, 'length', 0) or 0)
+        return {'title': title, 'duration': duration} if title and duration > 0 else None
+    except Exception:
+        return None
+
+
+def _spotify_id_from_tracks(
+    download_dir: Path, name: str, track_files: list[str]
+) -> Optional[str]:
+    """Find the artist through one of their own tracks when the name search
+    fails (spelling differs, extra script, joined credits): the Spotify track
+    must have the same title, a length within 5 s, and be led by an artist
+    whose name contains (or is contained in) *name*."""
+
+    from .album_source import _title
+    key = _name_key(name)
+    if not key:
+        return None
+    for filename in track_files[:3]:
+        facts = _local_track_facts(download_dir, filename)
+        if not facts:
+            continue
+        try:
+            albums = spotify.search(f"{name} {facts['title']}").get('albums', [])
+        except Exception:
+            continue
+        for album in albums[:3]:
+            try:
+                tracks = spotify.album_tracks_from_id(album['id'])
+            except Exception:
+                continue
+            for track in tracks or []:
+                lead = _name_key((track.get('artists') or [''])[0])
+                if (_title(track.get('name')) == _title(facts['title'])
+                        and abs(float(track.get('duration') or 0) - facts['duration']) <= 5
+                        and lead and (key in lead or lead in key)):
+                    try:
+                        found = spotify.primary_artist_id_from_track_id(track['song_id'])
+                    except Exception:
+                        found = None
+                    if found:
+                        return found
+    return None
+
+
+def _relink_spotify(
+    download_dir: Path, name: str, track_files: list[str], track_index: Any
+) -> dict[str, Any]:
+    """Retry the Spotify link of an existing profile that has none, at
+    most once a day, and save it when found."""
+
+    profile = load_profile(download_dir, name)
+    if profile['platforms_id'].get('spotify'):
+        return profile
+    try:
+        last = datetime.fromisoformat(str(profile.get('spotify_lookup_at') or ''))
+        if datetime.now(timezone.utc) - last < _RELINK_EVERY:
+            return profile
+    except ValueError:
+        pass
+    found = (resolve_spotify_artist_id(track_files, track_index, name)
+             or _spotify_id_from_tracks(download_dir, name, track_files))
+    if found:
+        profile['platforms_id']['spotify'] = found
+        profile.pop('spotify_lookup_at', None)
+    else:
+        profile['spotify_lookup_at'] = datetime.now(timezone.utc).isoformat()
+    _save_profile(download_dir, name, profile)
+    return load_profile(download_dir, name)
+
+
 def _seed_image_from_streams(
     download_dir: Path,
     name: str,
@@ -795,11 +929,11 @@ def _seed_image_from_streams(
                 )
             return
 
-    wanted = file_name_key(name)
+    wanted = _artist_identity(name)
     if not wanted:
         return
     for artist in providers.search_artists(name, limit=25):
-        if file_name_key(str(artist.get('name') or '')) != wanted:
+        if _artist_identity(str(artist.get('name') or '')) != wanted:
             continue
         url = artist.get('cover_url') or ''
         if url:
@@ -857,7 +991,15 @@ def ensure_profile(
     """
 
     if _profile_path_for(download_dir, name).is_file():
-        return load_profile(download_dir, name)
+        profile = load_profile(download_dir, name)
+        if profile['platforms_id'].get('spotify'):
+            return profile
+        with _seed_lock_for(download_dir, name):
+            try:
+                return _relink_spotify(download_dir, name, track_files, track_index)
+            except Exception:
+                logger.opt(exception=True).debug('Spotify relink failed for {!r}', name)
+                return load_profile(download_dir, name)
 
     with _seed_lock_for(download_dir, name):
         # Whoever held the lock (a download, another visit) may just have
@@ -952,7 +1094,7 @@ _seed_workers_guard = threading.Lock()
 
 
 def _seed_key(download_dir: Path, name: str) -> str:
-    return str(_profile_path_for(download_dir, name)).lower()
+    return str(_hashed_sidecar_path(download_dir, _PROFILE_DIRNAME, name, '.json'))
 
 
 def _seed_lock_for(download_dir: Path, name: str) -> threading.Lock:
@@ -971,7 +1113,7 @@ def profile_seed_artist_of(song: dict[str, Any]) -> str:
     worth a profile (``Various Artists``)."""
 
     album_artist = str(song.get('album_artist') or '').strip()
-    artists = song.get('artists') or []
+    artists = [] if song.get('artists_structured') is False else (song.get('artists') or [])
     first = str(artists[0]).strip() if artists else ''
     name = album_artist or first
     return '' if name.casefold() in {'various artists', 'unknown'} else name
@@ -984,14 +1126,23 @@ def _spotify_artist_id_for_song(
     first credited artist is *name* (it can't pick a namesake), else an
     exact-name search."""
 
+    if song.get('artists_structured') is False:
+        return None
     track_id = song.get('song_id')
     artists = song.get('artists') or []
+    ids = song.get('artist_ids') or []
+    if song.get('source') == 'spotify' and len(ids) == len(artists):
+        matches = {ids[i] for i, artist in enumerate(artists)
+                   if _artist_identity(str(artist)) == _artist_identity(name)
+                   and isinstance(ids[i], str) and re.fullmatch(r'[A-Za-z0-9]{22}', ids[i])}
+        if len(matches) == 1:
+            return next(iter(matches))
     if (
         song.get('source') == 'spotify'
         and isinstance(track_id, str)
         and re.fullmatch(r'[A-Za-z0-9]{22}', track_id)
         and artists
-        and file_name_key(str(artists[0])) == file_name_key(name)
+        and _artist_identity(str(artists[0])) == _artist_identity(name)
     ):
         try:
             found = spotify.primary_artist_id_from_track_id(track_id)
@@ -1167,11 +1318,7 @@ _top_songs_locks_guard = threading.Lock()
 def profile_top_songs_path_for(download_dir: Path, name: str) -> Path:
     """The file for *name*'s top songs, whether or not it exists."""
 
-    return (
-        Path(download_dir)
-        / _TOP_SONGS_DIRNAME
-        / f'{_sanitize(name)}{_TOP_SONGS_SUFFIX}'
-    )
+    return _identity_sidecar_path(download_dir, _TOP_SONGS_DIRNAME, name, _TOP_SONGS_SUFFIX)
 
 
 def _profile_top_songs_lock_for(
@@ -1180,7 +1327,7 @@ def _profile_top_songs_lock_for(
     """One lock per artist: a background refresh and a request for the
     same artist queue up behind each other instead of fetching twice."""
 
-    key = str(profile_top_songs_path_for(download_dir, name)).lower()
+    key = str(_hashed_sidecar_path(download_dir, _TOP_SONGS_DIRNAME, name, _TOP_SONGS_SUFFIX))
     with _top_songs_locks_guard:
         return _top_songs_locks.setdefault(key, threading.Lock())
 
@@ -1198,7 +1345,7 @@ def profile_top_songs_load(
         )
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or not isinstance(data.get('songs'), list):
+    if not _data_name_matches(data, name) or not isinstance(data.get('songs'), list):
         return None
     return data
 

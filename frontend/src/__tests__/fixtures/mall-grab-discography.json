@@ -1,0 +1,562 @@
+[
+  {
+    "id": "4r18cGNjieFLVFFLbHg6uC",
+    "data": {
+      "name": "What I Breathe",
+      "subtitle": "Mall Grab",
+      "year": "2022",
+      "release_type": "album"
+    },
+    "tracks": [
+      {
+        "song_id": "6Iv4g7pomiQ3QdMzT1Cvw1",
+        "name": "Hand In Hand Through Wonderland",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 327,
+        "explicit": false,
+        "track_number": 1,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "5P5rO7LozCwD74uGp5dqVI",
+        "name": "I Can Remember It So Vividly",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 267,
+        "explicit": false,
+        "track_number": 2,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "6nRVXNpNp3cGq2gjvd7Xp3",
+        "name": "Love Reigns",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 294,
+        "explicit": false,
+        "track_number": 3,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "64TtfyCKNVpg5c2KhWOGEL",
+        "name": "Understand",
+        "artists": [
+          "Mall Grab",
+          "Brendan Yates"
+        ],
+        "duration": 223,
+        "explicit": false,
+        "track_number": 4,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "5JuS6KfpfQ4I0TFWFPwoAT",
+        "name": "Patience",
+        "artists": [
+          "Mall Grab",
+          "Nia Archives"
+        ],
+        "duration": 257,
+        "explicit": false,
+        "track_number": 5,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "7CVRem4xAoOE5WIpA3Py4j",
+        "name": "Without The Sun",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 266,
+        "explicit": false,
+        "track_number": 6,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "6AjHAFreWc7HpWtMwsVW36",
+        "name": "Spirit Wave",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 316,
+        "explicit": false,
+        "track_number": 7,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0YnhXBWNNZJZVvo3VKGK00",
+        "name": "Breathing",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 286,
+        "explicit": false,
+        "track_number": 8,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "1fpYBZMv79L94DBRvXjXP9",
+        "name": "Intercity Relations",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 285,
+        "explicit": false,
+        "track_number": 9,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "7m9nuim7oiAxsXFjsclN5J",
+        "name": "Times Change",
+        "artists": [
+          "Mall Grab",
+          "D Double E",
+          "Novelist"
+        ],
+        "duration": 184,
+        "explicit": false,
+        "track_number": 10,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0yFkTWSkalTcErKQscxsvi",
+        "name": "Distant Conversation",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 316,
+        "explicit": false,
+        "track_number": 11,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0VKiG4cciRVzc0DLgVVK7E",
+        "name": "Metaphysical",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 303,
+        "explicit": false,
+        "track_number": 12,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0PDa9Pw5Fi8fJ3uhyg908G",
+        "name": "Lost In Harajuku",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 276,
+        "explicit": false,
+        "track_number": 13,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      }
+    ],
+    "locations": [
+      {
+        "key": "6Iv4g7pomiQ3QdMzT1Cvw1",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "5P5rO7LozCwD74uGp5dqVI",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "6nRVXNpNp3cGq2gjvd7Xp3",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "64TtfyCKNVpg5c2KhWOGEL",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "5JuS6KfpfQ4I0TFWFPwoAT",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "7CVRem4xAoOE5WIpA3Py4j",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "6AjHAFreWc7HpWtMwsVW36",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0YnhXBWNNZJZVvo3VKGK00",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "1fpYBZMv79L94DBRvXjXP9",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "7m9nuim7oiAxsXFjsclN5J",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0yFkTWSkalTcErKQscxsvi",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0VKiG4cciRVzc0DLgVVK7E",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0PDa9Pw5Fi8fJ3uhyg908G",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      }
+    ]
+  },
+  {
+    "id": "2UNAcB8u7FFK0gAqQjzszb",
+    "data": {
+      "name": "What I Breathe",
+      "subtitle": "Mall Grab",
+      "year": "2022",
+      "release_type": "album"
+    },
+    "tracks": [
+      {
+        "song_id": "4vCJUvKtBgSDVm9ZAxvete",
+        "name": "Hand In Hand Through Wonderland",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 327,
+        "explicit": false,
+        "track_number": 1,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "5eRR6nRklP1loAVH7YhDGo",
+        "name": "I Can Remember It So Vividly",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 267,
+        "explicit": false,
+        "track_number": 2,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "2Bl3tuB59kozPfqvUBEULK",
+        "name": "Love Reigns",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 294,
+        "explicit": false,
+        "track_number": 3,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0ZAAGoT5Nh5FQhu3gU0JPQ",
+        "name": "Understand",
+        "artists": [
+          "Mall Grab",
+          "Brendan Yates"
+        ],
+        "duration": 223,
+        "explicit": false,
+        "track_number": 4,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "1PUG8c4d0DwBTisjr7zHYV",
+        "name": "Patience",
+        "artists": [
+          "Mall Grab",
+          "Nia Archives"
+        ],
+        "duration": 257,
+        "explicit": false,
+        "track_number": 5,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "6JydWqtTOdRBJkfJC5dX69",
+        "name": "Without The Sun",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 266,
+        "explicit": false,
+        "track_number": 6,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "3mlPs1EfPfVPymBMQXIiYR",
+        "name": "Spirit Wave",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 316,
+        "explicit": false,
+        "track_number": 7,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "0Oowrfg1EYDc1gyZDYPbm0",
+        "name": "Breathing",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 286,
+        "explicit": false,
+        "track_number": 8,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "5Q6wLQSNlLnn2C1ehpbCSk",
+        "name": "Intercity Relations",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 285,
+        "explicit": false,
+        "track_number": 9,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "3Ske7rs7J67XfQxFEpygoy",
+        "name": "Times Change",
+        "artists": [
+          "Mall Grab",
+          "D Double E",
+          "Novelist"
+        ],
+        "duration": 184,
+        "explicit": false,
+        "track_number": 10,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "5uwG8qhgwHbiLXWiWxaNtO",
+        "name": "Distant Conversation",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 316,
+        "explicit": false,
+        "track_number": 11,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "4dtd6NJ6vRMjQqaepFkDCA",
+        "name": "Metaphysical",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 303,
+        "explicit": false,
+        "track_number": 12,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      },
+      {
+        "song_id": "1nOORp3DLa2UTqUFXrcZk1",
+        "name": "Lost In Harajuku",
+        "artists": [
+          "Mall Grab"
+        ],
+        "duration": 276,
+        "explicit": false,
+        "track_number": 13,
+        "release_date": "2022-08-05",
+        "album_name": "What I Breathe"
+      }
+    ],
+    "locations": [
+      {
+        "key": "4vCJUvKtBgSDVm9ZAxvete",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "5eRR6nRklP1loAVH7YhDGo",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "2Bl3tuB59kozPfqvUBEULK",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0ZAAGoT5Nh5FQhu3gU0JPQ",
+        "downloaded": true,
+        "formats": [
+          "mp3"
+        ],
+        "album_formats": [],
+        "albums": [],
+        "playlists": [
+          {
+            "name": "My Playlist #1"
+          }
+        ]
+      },
+      {
+        "key": "1PUG8c4d0DwBTisjr7zHYV",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "6JydWqtTOdRBJkfJC5dX69",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "3mlPs1EfPfVPymBMQXIiYR",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "0Oowrfg1EYDc1gyZDYPbm0",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "5Q6wLQSNlLnn2C1ehpbCSk",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "3Ske7rs7J67XfQxFEpygoy",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "5uwG8qhgwHbiLXWiWxaNtO",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "4dtd6NJ6vRMjQqaepFkDCA",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      },
+      {
+        "key": "1nOORp3DLa2UTqUFXrcZk1",
+        "downloaded": false,
+        "formats": [],
+        "album_formats": [],
+        "albums": [],
+        "playlists": []
+      }
+    ]
+  }
+]

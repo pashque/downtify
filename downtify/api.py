@@ -539,6 +539,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'overwrite_existing_files': True,
     'organize_by_artist': True,
     'organize_by_album': True,
+    'folder_structure': None,
+    'playlist_use_library': True,
     'search_albums': True,
     'mini_player_enabled': True,
     # The language the web UI is shown in (``en``, ``pt-BR``...). The choice
@@ -853,15 +855,13 @@ def _validate_integration_settings(
 
 
 def _organize_enabled() -> bool:
-    """True when tracks are routed into per-artist/per-album folders.
+    """Whether playlists share library audio and put M3Us in ``Playlists/``.
 
-    In that case per-playlist folders are bypassed, so the M3U must be
-    written to the legacy ``Playlists/`` directory where its relative
-    track paths still resolve.
+    This includes managed flat-root storage, not just artist/album folders.
     """
+    from downtify.folder_settings import downloader_uses_shared_playlists
 
-    d = state.downloader
-    return bool(d and (d.organize_by_artist or d.organize_by_album))
+    return downloader_uses_shared_playlists(state.downloader)
 
 
 def _effective_lyrics_providers(settings: dict[str, Any]) -> list[str]:
@@ -2486,6 +2486,271 @@ def search_artists_endpoint(query: str = Query('')) -> list[dict[str, Any]]:
     return providers.search_artists(query, limit=10)
 
 
+@router.get('/api/artists/spotify_id')
+def artist_spotify_id_endpoint(
+    name: str = Query(..., min_length=1, max_length=200),
+) -> dict[str, Any]:
+    """Spotify artist id for an exact artist name (``{id}`` or 404), so a
+    clickable artist on a link page can open their whole discography."""
+    try:
+        found = spotify.search_artist_by_name(name.strip())
+    except Exception:
+        logger.opt(exception=True).debug('Spotify artist lookup failed for {!r}', name)
+        found = None
+    if not found or not re.fullmatch(r'[A-Za-z0-9]{22}', str(found.get('id') or '')):
+        raise HTTPException(status_code=404, detail='Artist not found on Spotify')
+    return {'id': found['id'], 'name': found.get('name') or name}
+
+
+_YTM_LINK_CACHE: dict[tuple[str, str, str, int], str] = {}
+
+
+@router.post('/api/library/artist-separator')
+async def library_artist_separator(request: Request) -> dict[str, Any]:
+    """Admin: rewrite existing MP3 artist tags "A; B" -> "A, B" (+ ARTISTS).
+
+    ``{dry_run: true}`` (default) only lists what would change. A real run
+    backs every original value up first (``restore`` with that backup path
+    undoes it), keeps file dates, and refreshes the library's metadata.
+    """
+    from . import artist_separator
+    payload = await _json_object(request)
+    restore = str(payload.get('restore') or '').strip()
+    backup_dir = Path(state.settings_path).parent / 'artist-separator-backups' if state.settings_path else None
+    if restore:
+        target = Path(restore)
+        if backup_dir is None or target.parent.resolve() != backup_dir.resolve() or not target.is_file():
+            raise HTTPException(status_code=400, detail='Unknown backup')
+        return await asyncio.to_thread(artist_separator.restore_from_backup, target)
+    ctx = library_context()
+    entries = listing_for_request(ctx)
+    files = []
+    for entry in entries:
+        stored = str(entry.get('file') or '').replace('\\', '/')
+        if stored.casefold().endswith('.mp3'):
+            full = resolve_library_file(stored, ctx)
+            if full is not None:
+                files.append((stored, full))
+    items = await asyncio.to_thread(artist_separator.plan, files)
+    summary = {'candidates': len(items),
+               'id3v23': sum(1 for i in items if i['version'] != 4),
+               'sample': [{k: i[k] for k in ('file', 'before', 'after')} for i in items[:10]]}
+    if payload.get('dry_run', True) is not False:
+        return {'dry_run': True, **summary}
+    if backup_dir is None:
+        raise HTTPException(status_code=500, detail='No data folder for the backup')
+    backup = backup_dir / datetime.now(timezone.utc).strftime('artist-separator-%Y%m%dT%H%M%SZ.json')
+    downloader = state.downloader
+
+    def refresh(stored: str) -> None:
+        if state.metadata_cache is not None and downloader is not None:
+            state.metadata_cache.refresh_stored_path(
+                stored, download_dir=Path(downloader.download_dir),
+                slskd_dir=slskd_dir_from_downloader(downloader))
+        merge_library_listing_file(ctx, stored)
+
+    result = await asyncio.to_thread(artist_separator.apply, items, backup, refresh)
+    return {'dry_run': False, **summary, **result}
+
+
+@router.post('/api/library/artist-credits/repair')
+async def library_artist_credit_repair(request: Request) -> dict[str, Any]:
+    """Admin-only explicit credit repair; dry run by default, full backups."""
+    from . import artist_credit_repair
+    import hashlib
+    if not request_is_admin(request):
+        raise HTTPException(status_code=403, detail='Admin required')
+    payload = await _json_object(request)
+    items = payload.get('items') or []
+    sources = payload.get('source_tracks') or []
+    if not isinstance(items, list) or len(items) > 100 or not isinstance(sources, list) or len(sources) > 100:
+        raise HTTPException(status_code=400, detail='At most 100 repair items and source tracks')
+    ctx = library_context()
+    planned = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail='Invalid item')
+        stored = str(item.get('file') or '')
+        path = resolve_library_file(stored, ctx)
+        if path is None or path.suffix.casefold() != '.mp3':
+            raise HTTPException(status_code=400, detail='Unknown MP3')
+        data = await asyncio.to_thread(path.read_bytes)
+        before, after = item.get('before'), item.get('after')
+        if not isinstance(before, list) or not isinstance(after, list):
+            raise HTTPException(status_code=400, detail='Artist lists required')
+        if hashlib.sha256(data).hexdigest() != item.get('sha_before'):
+            raise HTTPException(status_code=409, detail='File changed since planning')
+        try:
+            await asyncio.to_thread(artist_credit_repair.prepare, data, before, after)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        planned.append((stored, path, before, after, item['sha_before']))
+    for row in sources:
+        if (not isinstance(row, dict) or not re.fullmatch(r'[A-Za-z0-9]{22}', str(row.get('song_id') or ''))
+                or not isinstance(row.get('artists'), list)
+                or not row['artists'] or any(not isinstance(n, str) or not n.strip() for n in row['artists'])
+                or not isinstance(row.get('name'), str)):
+            raise HTTPException(status_code=400, detail='Invalid source track')
+    if payload.get('dry_run', True) is not False:
+        return {'dry_run': True, 'candidates': len(planned), 'source_tracks': len(sources)}
+    if not state.settings_path:
+        raise HTTPException(status_code=500, detail='No data directory')
+    backup = Path(state.settings_path).parent / 'artist-credit-repair-backups' / datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    backup.mkdir(parents=True, exist_ok=False)
+    (backup / 'plan.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    (backup / 'plan.json').chmod(0o600)
+    previous_sources = {row['song_id']: state.playlist_spotify_cache.get_cached_track(row['song_id']) for row in sources} if state.playlist_spotify_cache is not None else {}
+    (backup / 'source-before.json').write_text(json.dumps(previous_sources, ensure_ascii=False, indent=2))
+    (backup / 'source-before.json').chmod(0o600)
+    changed = []
+    for i, (stored, path, before, after, sha) in enumerate(planned):
+        await asyncio.to_thread(artist_credit_repair.apply_file, path, before, after, sha, backup / f'{i}.mp3')
+        if state.metadata_cache is not None and state.downloader is not None:
+            await asyncio.to_thread(state.metadata_cache.refresh_stored_path, stored,
+                download_dir=Path(state.downloader.download_dir), slskd_dir=slskd_dir_from_downloader(state.downloader))
+        merge_library_listing_file(ctx, stored)
+        changed.append(stored)
+    if state.playlist_spotify_cache is not None:
+        for row in sources:
+            state.playlist_spotify_cache.store_track(row['song_id'], row)
+    return {'dry_run': False, 'changed': len(changed), 'files': changed, 'source_tracks': len(sources), 'backup': str(backup)}
+
+
+def _source_link_identity(value: str) -> str:
+    import unicodedata
+    return ' '.join(unicodedata.normalize('NFKC', str(value)).lower().split())
+
+
+def _source_link_credits(artist: str, artists: Any) -> list[str]:
+    # Repeated query parameters are structured credits; a display comma is not.
+    if isinstance(artists, list):
+        return [a.strip() for a in artists if isinstance(a, str) and a.strip()]
+    return [artist.strip()] if artist.strip() else []
+
+
+@router.get('/api/youtube_music/link')
+def youtube_music_link_endpoint(
+    kind: str = Query(..., pattern=r'^(track|album)$'),
+    artist: str = Query('', max_length=300),
+    title: str = Query(..., min_length=1, max_length=300),
+    duration: int = Query(0, ge=0, le=36000),
+    artists: Optional[list[str]] = Query(None),
+    source_id: str = Query('', max_length=300),
+) -> dict[str, Any]:
+    """The real YouTube Music page of a track (``watch?v=``) or album
+    (``browse/``) for a song or release from another source - never a
+    search page. 404 when YouTube Music has no matching item."""
+    from .album_source import _album_key
+    credits = _source_link_credits(artist, artists)
+    artist = ', '.join(credits)
+    if isinstance(source_id, str) and source_id:
+        pattern = r'[A-Za-z0-9_-]{11}' if kind == 'track' else r'[A-Za-z0-9_-]+'
+        if not re.fullmatch(pattern, source_id):
+            raise HTTPException(status_code=422, detail='Invalid YouTube Music source_id')
+        path = 'watch?v=' if kind == 'track' else 'browse/'
+        return {'url': f'https://music.youtube.com/{path}{source_id}'}
+    key = (kind, tuple(credits), title.strip().casefold(), duration)
+    if key in _YTM_LINK_CACHE:
+        return {'url': _YTM_LINK_CACHE[key]}
+    url = ''
+    try:
+        if kind == 'track':
+            song = {'name': title.strip(), 'artists': credits,
+                    'artist': artist.strip(), 'duration': duration}
+            video_id, _ = providers.find_match(song)
+            if isinstance(video_id, str) and re.fullmatch(r'[\w-]{11}', video_id):
+                url = f'https://music.youtube.com/watch?v={video_id}'
+        else:
+            want = _album_key(title)
+            lead = _source_link_identity(credits[0]) if credits else ''
+            for album in providers.search_albums(f'{artist} {title}'.strip(), limit=10):
+                names = {_source_link_identity(a) for a in album.get('artists') or []}
+                if _album_key(album.get('name')) == want and (not lead or lead in names):
+                    url = str(album.get('url') or '')
+                    break
+    except Exception:
+        logger.opt(exception=True).debug('YouTube Music link lookup failed')
+    if not url.startswith('https://music.youtube.com/'):
+        raise HTTPException(status_code=404, detail='Not found on YouTube Music')
+    if len(_YTM_LINK_CACHE) > 2000:
+        _YTM_LINK_CACHE.clear()
+    _YTM_LINK_CACHE[key] = url
+    return {'url': url}
+
+
+@router.get('/api/spotify/album/editions')
+def spotify_album_editions_endpoint(album_id: str = Query(...), request: Request = None) -> dict[str, Any]:
+    """Discover choices for the exact opened source, without selecting a sibling."""
+    if not isinstance(album_id, str) or not re.fullmatch(r'[A-Za-z0-9]{22}', album_id):
+        raise HTTPException(status_code=400, detail='Invalid Spotify album ID')
+    from .album_source import discover_album_editions
+    result = discover_album_editions(album_id)
+    if request is not None:
+        try:
+            from .recording_equivalence import warm_source_equivalence
+            warm_source_equivalence(result, entries_for_request(request), state.track_index)
+        except Exception:
+            logger.debug('Equivalent source evidence unavailable')
+    return result
+
+
+@router.get('/api/spotify/link')
+def spotify_link_endpoint(
+    kind: str = Query('album', pattern=r'^(album|track)$'),
+    artist: str = Query('', max_length=300),
+    title: str = Query(..., min_length=1, max_length=300),
+    album: str = Query('', max_length=300),
+    artists: Optional[list[str]] = Query(None),
+    source_id: str = Query('', max_length=22),
+) -> dict[str, Any]:
+    """The real Spotify page for an album, or for a track (found on its
+    album: exact album title + lead artist, then exact track title); 404
+    instead of a search page."""
+    from .album_source import _album_key, _exact, _title
+    album = album if isinstance(album, str) else ''  # direct (non-HTTP) calls
+    credits = _source_link_credits(artist, artists)
+    artist = ', '.join(credits)
+    if isinstance(source_id, str) and source_id:
+        if not re.fullmatch(r'[A-Za-z0-9]{22}', source_id):
+            raise HTTPException(status_code=422, detail='Invalid Spotify source_id')
+        return {'url': f'https://open.spotify.com/{kind}/{source_id}'}
+    album_title = title if kind == 'album' else album
+    key = ('spotify', kind, tuple(credits), title.strip().casefold(),
+           album.strip().casefold())
+    if key in _YTM_LINK_CACHE:
+        return {'url': _YTM_LINK_CACHE[key]}
+    url = ''
+    want = _album_key(album_title)
+    lead = _source_link_identity(credits[0]) if credits else ''
+    try:
+        if album_title.strip():
+            for found in spotify.search(f'{artist} {album_title}'.strip()).get('albums', []):
+                names = {_source_link_identity(a) for a in found.get('artists') or []}
+                album_id = str(found.get('id') or '')
+                if not (_album_key(found.get('name')) == want and (not lead or lead in names)
+                        and re.fullmatch(r'[A-Za-z0-9]{22}', album_id)):
+                    continue
+                if kind == 'album':
+                    url = f'https://open.spotify.com/album/{album_id}'
+                    break
+                # Exact title first; the credit-suffix-insensitive match only
+                # when there is exactly one (never a Remix for the original).
+                rows = spotify.album_tracks_from_id(album_id)
+                exact = [r for r in rows if _exact(r.get('name')) == _exact(title)]
+                loose = [r for r in rows if _title(r.get('name')) == _title(title)]
+                pick = exact[0] if exact else (loose[0] if len(loose) == 1 else None)
+                track_id = str((pick or {}).get('song_id') or '')
+                if re.fullmatch(r'[A-Za-z0-9]{22}', track_id):
+                    url = f'https://open.spotify.com/track/{track_id}'
+                break
+    except Exception:
+        logger.opt(exception=True).debug('Spotify link lookup failed')
+    if not url:
+        raise HTTPException(status_code=404, detail='Not found on Spotify')
+    _YTM_LINK_CACHE[key] = url
+    return {'url': url}
+
+
 @router.get('/api/discover/chart')
 def discover_chart_endpoint(
     limit: int = Query(25, ge=1, le=50),
@@ -3152,12 +3417,38 @@ def _artists_label(song: dict[str, Any]) -> str:
     return str(song.get('artist') or '')
 
 
+_RELEASE_TYPE_CACHE: dict[str, str] = {}
+
+
+def _spotify_album_release_type(album_id: str, name: str, artist: str) -> str:
+    """The album's Spotify release type (album/single/ep/compilation) from
+    the search entry with this exact id; '' when search doesn't list it."""
+    from .album_source import _release_type
+    if album_id in _RELEASE_TYPE_CACHE:
+        return _RELEASE_TYPE_CACHE[album_id]
+    kind = ''
+    try:
+        for found in spotify.search(f'{artist} {name}'.strip()).get('albums', []):
+            if str(found.get('id') or '') == album_id:
+                kind = _release_type(found.get('type'))
+                break
+    except Exception:
+        logger.opt(exception=True).debug('Spotify release type lookup failed')
+    if len(_RELEASE_TYPE_CACHE) > 2000:
+        _RELEASE_TYPE_CACHE.clear()
+    _RELEASE_TYPE_CACHE[album_id] = kind
+    return kind
+
+
 def _collection_details(
     kind: str, tracks: list[dict[str, Any]], name: str = ''
 ) -> dict[str, Any]:
+    from .album_source import _release_type
     first = tracks[0] if tracks else {}
     is_album = kind == 'album'
+    extra = {'release_type': _release_type(first.get('release_type'))} if is_album else {}
     return {
+        **extra,
         'kind': kind,
         'name': name or str(first.get('album_name') or ''),
         'subtitle': _artists_label(first) if is_album else '',
@@ -3186,7 +3477,13 @@ def _spotify_details(kind: str, sid: str) -> dict[str, Any]:
     if kind == 'track':
         return _track_details(spotify.track_from_id(sid, with_album=True))
     if kind == 'album':
-        return _collection_details('album', spotify.album_tracks_from_id(sid))
+        from .artist_credit_repair import source_credits
+        details = _collection_details('album', source_credits(spotify.album_tracks_from_id(sid), state.playlist_spotify_cache))
+        if not details['release_type']:
+            first = details['tracks'][0] if details['tracks'] else {}
+            lead = (first.get('artists') or [''])[0] or first.get('artist') or ''
+            details['release_type'] = _spotify_album_release_type(sid, details['name'], str(lead))
+        return details
     if kind == 'playlist':
         name, tracks = spotify.playlist_info_and_tracks(sid)
         return _collection_details('playlist', tracks, name)
@@ -3194,7 +3491,8 @@ def _spotify_details(kind: str, sid: str) -> dict[str, Any]:
         # The embed has no discography (see spotify.artist_name_from_id);
         # the releases come from the player's artist overview. The client
         # offers the top songs from /api/artists/top_songs/url.
-        name, cover_url, releases = spotify.artist_page_from_id(sid)
+        quality = {}
+        name, cover_url, releases = spotify.artist_page_from_id(sid, metadata=quality)
         return {
             'kind': 'artist',
             'name': name,
@@ -3203,6 +3501,7 @@ def _spotify_details(kind: str, sid: str) -> dict[str, Any]:
             'year': '',
             'tracks': [],
             'albums': releases,
+            'discography_status': quality,
         }
     raise HTTPException(
         status_code=400, detail=f'Unsupported entity type: {kind}'
@@ -3386,6 +3685,19 @@ async def artist_top_songs_from_url_endpoint(
     return await asyncio.to_thread(_resolve_artist_top_songs, url)
 
 
+def _request_audio_format(hints: Optional[dict[str, Any]]) -> Optional[str]:
+    """Validate an explicit output container without changing global settings."""
+    if not isinstance(hints, dict):
+        return None
+    key = 'audioFormat' if 'audioFormat' in hints else 'downtify_audio_format'
+    if key not in hints:
+        return None
+    fmt = hints[key]
+    if not isinstance(fmt, str) or fmt not in {'mp3', 'flac', 'ogg', 'opus', 'm4a'}:
+        raise HTTPException(status_code=400, detail='Unsupported audioFormat')
+    return fmt
+
+
 def _merge_client_track_hints(
     base: dict[str, Any],
     hints: Optional[dict[str, Any]],
@@ -3398,6 +3710,10 @@ def _merge_client_track_hints(
 
     if not isinstance(hints, dict) or not hints:
         return
+    if hints.get('downtify_destination') == 'album':
+        base['downtify_destination'] = 'album'
+    if hints.get('downtify_download_mode') in ('missing', 'redownload'):
+        base['downtify_download_mode'] = hints['downtify_download_mode']
     tn = hints.get('track_number')
     if tn is not None:
         try:
@@ -3451,13 +3767,17 @@ def _song_from_download_request(
     can search YouTube/YouTube Music for directly.
     """
 
+    fmt = _request_audio_format(client_hints)
     if (
         isinstance(client_hints, dict)
         and client_hints.get('source') in _CLIENT_RESOLVED_SOURCES
     ):
-        return dict(client_hints)
-    song = _song_for_download(url)
-    _merge_client_track_hints(song, client_hints)
+        song = dict(client_hints)
+    else:
+        song = _song_for_download(url)
+        _merge_client_track_hints(song, client_hints)
+    if fmt is not None:
+        song['downtify_audio_format'] = fmt
     return song
 
 
@@ -3523,6 +3843,7 @@ def _register_job(
         state.download_jobs[song_id] = job
     elif job.get('status') not in {'queued', 'downloading'}:
         job.update(
+            song=song,
             status=status,
             progress=0,
             message='',
@@ -3647,7 +3968,14 @@ async def _run_download(
     lock = _download_locks.setdefault(song_id, asyncio.Lock())
     try:
         async with lock:
-            if job.get('status') == 'done' and job.get('filename'):
+            from .download_destination import matches_destination
+            if (song.get('downtify_download_mode') != 'redownload'
+                    and job.get('status') == 'done' and job.get('filename')
+                    and (not song.get('downtify_audio_format')
+                         or _resolve_existing_format_download(
+                             state.downloader, song, subdir=subdir,
+                             track_index=state.track_index) == (job['filename'], 'Already at destination'))
+                    and matches_destination(state.downloader, song, job['filename'], subdir)):
                 sharers = _job_users(job)
                 if sharers:
                     await asyncio.to_thread(
@@ -3672,6 +4000,27 @@ async def _run_download(
     finally:
         if not lock.locked():
             _download_locks.pop(song_id, None)
+
+
+def _resolve_existing_format_download(
+    downloader: Any, song: dict[str, Any], *, subdir: Optional[str] = None,
+    track_index: Any = None,
+) -> Optional[tuple[str, str]]:
+    """Explicit formats require a physical copy in the intended destination."""
+    fmt = song.get('downtify_audio_format')
+    if not fmt:
+        return resolve_existing_download(downloader, song, subdir=subdir, track_index=track_index)
+    local = downloader.existing_filename_for(song, subdir=subdir)
+    if local:
+        return local, 'Already at destination'
+    parent = Path(downloader.expected_stem_for(song, subdir)).parent
+    for stored in track_index.source_copies_for_song(song) if track_index is not None else []:
+        path = Path(stored)
+        if (path.parent == parent and path.suffix.lower() == '.' + fmt
+                and locate_library_file(stored, Path(downloader.download_dir),
+                                        slskd_dir_from_downloader(downloader))):
+            return stored, 'Already at destination'
+    return None
 
 
 async def _run_download_locked(
@@ -3701,9 +4050,10 @@ async def _run_download_locked(
     sem = state.download_semaphore
     try:
         async with sem if sem is not None else contextlib.nullcontext():
-            if not getattr(state.downloader, 'overwrite_existing_files', True):
+            from .download_destination import skip_existing_for
+            if skip_existing_for(song, getattr(state.downloader, 'overwrite_existing_files', True)):
                 existing_hit = await asyncio.to_thread(
-                    resolve_existing_download,
+                    _resolve_existing_format_download,
                     state.downloader,
                     song,
                     subdir=subdir,
@@ -3991,6 +4341,9 @@ async def _write_batch_m3u(
     resolved: dict[int, Optional[str]],
     playlist_name: str,
     playlist_subdir: str,
+    *,
+    preserve_existing: bool = True,
+    source_order: Optional[list[str]] = None,
 ) -> Optional[Path]:
     entries = _m3u_entries_for(songs, resolved)
     if not entries:
@@ -4008,6 +4361,8 @@ async def _write_batch_m3u(
             entries,
             playlist_subdir=None if organize else playlist_subdir,
             slskd_dir=slskd_dir_from_downloader(state.downloader),
+            preserve_existing=preserve_existing,
+            **({'source_order': source_order} if source_order is not None else {}),
         )
     except Exception:
         logger.exception('Failed to write M3U for {!r}', playlist_name)
@@ -4159,12 +4514,14 @@ async def _process_batch(
     playlist_subdir: Optional[str] = None
     spotify_playlist_id: Optional[str] = None
     spotify_track_count = 0
+    source_tracks: list[dict[str, Any]] = []
     target = _playlist_target_for_batch(playlist_url) if playlist_url else None
     if target is not None:
         try:
             playlist_name, tracks = await asyncio.to_thread(
                 _fetch_playlist_for_batch, *target
             )
+            source_tracks = tracks
             playlist_subdir = m3u.sanitize_playlist_name(playlist_name)
             if target[0] == SOURCE_SPOTIFY:
                 spotify_playlist_id = target[1]
@@ -4214,30 +4571,61 @@ async def _process_batch(
     # and one slow or hung track can't hold up what's already on disk.
     resolved: dict[int, Optional[str]] = {}
     m3u_lock = asyncio.Lock()
+    # A new full batch may rewrite its own growing snapshot in source order;
+    # a later missing-only batch must retain the playlist that predates it.
+    preserve_members = bool(wants_m3u and m3u.m3u_path_for(
+        state.downloader.download_dir, playlist_name,
+        playlist_subdir=None if _organize_enabled() else playlist_subdir,
+    ).is_file())
+    source_files = {}
+    source_positions = {}
+    for position, track in enumerate(source_tracks):
+        tid = normalize_spotify_track_id(track)
+        if tid:
+            source_positions.setdefault(tid, position)
+    # Selected/missing-only batches have their own compact indexes. Never
+    # persist those as source positions, or overwrite a legitimate zero.
+    songs = [dict(song, downtify_track_order=source_positions[tid])
+             if (tid := normalize_spotify_track_id(song)) in source_positions
+             else song for song in songs]
+    if source_tracks and state.playlist_catalog is not None:
+        source_files = {
+            row['track_spotify_id']: row['filename']
+            for row in await asyncio.to_thread(state.playlist_catalog.list_tracks, playlist_name)
+        }
+
+    def _source_order():
+        return ([source_files[tid] for track in source_tracks
+                 if (tid := normalize_spotify_track_id(track)) in source_files]
+                if source_tracks else None)
 
     async def _bounded(index: int, song: dict[str, Any], song_id: str) -> None:
         try:
             filename = await _run_download(
                 song,
                 song_id,
-                subdir=playlist_subdir,
+                subdir=_playlist_subdir_for_name(playlist_name) if playlist_name else playlist_subdir,
                 delay_seconds=delay_seconds,
                 playlist_name=playlist_name,
                 spotify_playlist_id=spotify_playlist_id,
-                track_order=int(song.get('downtify_track_order') or index),
+                track_order=int(song['downtify_track_order'] if song.get('downtify_track_order') is not None else index),
                 refresh_playlists=False,
                 user_id=user_id,
             )
         except Exception:
             filename = None
         resolved[index] = filename
+        if filename and (tid := normalize_spotify_track_id(song)):
+            source_files[tid] = filename
         if not (filename and wants_m3u):
             return
         # Serialized so concurrent downloads can't interleave writes to
         # the same file.
         async with m3u_lock:
             await _write_batch_m3u(
-                songs, resolved, playlist_name, playlist_subdir
+                songs, resolved, playlist_name, playlist_subdir,
+                preserve_existing=preserve_members,
+                source_order=_source_order(),
             )
 
     await asyncio.gather(
@@ -4249,7 +4637,8 @@ async def _process_batch(
     )
 
     if wants_m3u:
-        await _write_batch_m3u(songs, resolved, playlist_name, playlist_subdir)
+        await _write_batch_m3u(songs, resolved, playlist_name, playlist_subdir,
+                              preserve_existing=preserve_members, source_order=_source_order())
 
     await _finish_playlist_batch(
         songs,
@@ -4335,7 +4724,7 @@ async def _finish_playlist_batch(
                 song,
                 filename,
                 full,
-                track_order=int(song.get('downtify_track_order') or index),
+                track_order=int(song['downtify_track_order'] if song.get('downtify_track_order') is not None else index),
             )
         if spotify_playlist_id:
             linked = _rebuild_playlist_catalog_from_library(
@@ -4433,7 +4822,12 @@ def _rebuild_playlist_catalog_from_library(
     return linked
 
 
-def _playlist_subdir_for_name(playlist_name: str) -> str:
+def _playlist_subdir_for_name(playlist_name: str) -> Optional[str]:
+    # Legacy callers supplied playlist context even when the downloader
+    # ignored it for organized storage. Preserve that extension contract.
+    managed = type(getattr(state.downloader, 'folder_structure', None)) is bool
+    if managed and _organize_enabled():
+        return None
     return m3u.sanitize_playlist_name(playlist_name)
 
 
@@ -4853,6 +5247,19 @@ def _playlist_completeness_report(
     }
 
 
+def _monitored_spotify_playlist_ids(user_id: Optional[int] = None) -> set[str]:
+    """Admin monitor state must not leak into another account's batch scope."""
+    if user_id is not None or state.monitor_db is None:
+        return set()
+    try:
+        return {str(watch.spotify_id).strip()
+                for watch in state.monitor_db.list_playlists()
+                if _is_spotify_playlist_watch(watch)}
+    except Exception:
+        logger.opt(exception=True).debug('Could not read playlist monitor status')
+        return set()
+
+
 def _report_for_spotify_playlist(
     spotify_playlist_id: str,
     *,
@@ -4874,7 +5281,7 @@ def _report_for_spotify_playlist(
     )
     hint = int(meta.get('expected_hint') or 0)
     if mode == 'spotify':
-        return _playlist_completeness_report(
+        report = _playlist_completeness_report(
             sid,
             name,
             url,
@@ -4884,6 +5291,8 @@ def _report_for_spotify_playlist(
             refresh=refresh,
             user_id=user_id,
         )
+        report['monitored'] = sid in _monitored_spotify_playlist_ids(user_id)
+        return report
     report = _playlist_batch_summary(
         sid,
         name,
@@ -4891,6 +5300,7 @@ def _report_for_spotify_playlist(
         batch=batch if isinstance(batch, dict) else None,
         expected_hint=hint,
     )
+    report['monitored'] = sid in _monitored_spotify_playlist_ids(user_id)
     return report
 
 
@@ -4947,6 +5357,9 @@ def _build_playlist_batch_reports(
                 **kwargs,
             )
         )
+    monitored_ids = _monitored_spotify_playlist_ids(user_id)
+    for report in reports:
+        report['monitored'] = str(report.get('spotify_playlist_id') or '') in monitored_ids
     reports.sort(
         key=lambda row: (
             row.get('status') != 'complete',
@@ -5096,6 +5509,15 @@ async def download_batch_endpoint(request: Request) -> dict[str, Any]:
         raise HTTPException(
             status_code=400, detail='songs must be a non-empty list'
         )
+    fmt = _request_audio_format(payload)
+    # Validate row hints too; persisted/retried jobs use the private spelling.
+    formatted_songs = []
+    for song in songs:
+        row_fmt = _request_audio_format(song)
+        effective_fmt = fmt or row_fmt
+        formatted_songs.append(dict(song, downtify_audio_format=effective_fmt)
+                               if isinstance(song, dict) and effective_fmt else song)
+    songs = formatted_songs
     playlist_url = str(payload.get('playlist_url') or '')
     generate_m3u = bool(payload.get('generate_m3u', True))
     # No real Spotify/YouTube Music playlist id backs this batch (e.g. an
@@ -5276,7 +5698,17 @@ async def download_album_endpoint(
     if state.downloader is None:
         raise HTTPException(status_code=500, detail='Downloader not ready')
 
+    payload = {}
+    if (request.headers.get('content-length', '0') != '0'
+            or request.headers.get('transfer-encoding')):
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail='Invalid JSON') from exc
+    fmt = _request_audio_format(payload)
     songs = await asyncio.to_thread(_songs_for_album_download, url)
+    if fmt:
+        songs = [dict(song, downtify_audio_format=fmt) for song in songs]
     first_song = songs[0] if songs else {}
     await log_activity(
         request,
@@ -5719,7 +6151,9 @@ def _after_replacement(file: str, full: Path, old_key: str = '') -> None:
             logger.opt(exception=True).debug(
                 'Could not rekey owners for {}', file
             )
-    invalidate_library_paths_cache(notify=False)
+    # Replacement preserves mtime/Added. Retaining folded RAM/SQLite listings
+    # therefore leaves the old duration visible even after metadata.refresh().
+    invalidate_library_paths_cache(notify=False, drop_entries=True)
 
 
 # ---------------------------------------------------------------------------
@@ -5881,6 +6315,29 @@ async def _schedule_playlist_refresh_after_delete(
             )
 
     spawn_task(_run(), name='playlist-refresh-after-delete')
+
+
+@router.get('/api/library/audio-details')
+def library_audio_details(
+    request: Request,
+    file: str = Query(..., min_length=1, max_length=4096),
+) -> dict[str, Any]:
+    """Actual on-disk audio facts, requested only when opening Details.
+
+    Use the same visibility/content keys and confined root resolver as
+    library playback/archive, including slskd and external library roots.
+    Reauthorize and resolve before consulting the stat-keyed probe cache.
+    """
+    from .audio_details import read_audio_details
+
+    ctx = library_context()
+    full = resolve_library_file(file, ctx)
+    if full is None:
+        raise HTTPException(status_code=404, detail='File not found')
+    allowed = allowed_entry_keys(request)
+    if allowed is not None and content_key_for(full) not in allowed:
+        raise HTTPException(status_code=404, detail='File not found')
+    return read_audio_details(full)
 
 
 @router.get('/api/library/summary')
@@ -6086,17 +6543,209 @@ def _update_visibility(
     return {'changed': changed, 'labels': labels, **store.items()}
 
 
+@router.post('/api/library/source-audio-audit')
+async def source_audio_audit_endpoint(request: Request) -> dict[str, Any]:
+    if not request_is_admin(request):
+        raise HTTPException(status_code=403, detail='Admin required')
+    payload = await _json_object(request)
+    ids = payload.get('video_ids')
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 3 or any(not isinstance(v, str) or not _VIDEO_ID_RE.fullmatch(v) for v in ids):
+        raise HTTPException(status_code=400, detail='Provide one to three YouTube video IDs')
+    if state.downloader is None or state.track_index is None:
+        raise HTTPException(status_code=503, detail='Downloader unavailable')
+    from .source_audio_audit import audit_source
+    directory = Path(state.track_index._path).parent / 'source-audio-audit'
+    samples = []
+    for video_id in ids:
+        try:
+            samples.append(await asyncio.to_thread(audit_source, state.downloader, video_id, directory))
+        except Exception as exc:
+            logger.warning('Native input audit failed for {} ({})', video_id, type(exc).__name__)
+            samples.append({'video_id': video_id, 'error': type(exc).__name__})
+    return {'samples': samples, 'library_modified': False}
+
+
+@router.post('/api/library/album/bindings/repair')
+async def repair_library_album_bindings(request: Request) -> dict[str, Any]:
+    if not request_is_admin(request):
+        raise HTTPException(status_code=403, detail='Admin required')
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Invalid JSON')
+    if not isinstance(body, dict) or any(not isinstance(body.get(k), str) or not body[k].strip() for k in ('artist', 'title', 'edition')):
+        raise HTTPException(status_code=400, detail='Invalid repair request')
+    if not re.fullmatch(r'[A-Za-z0-9]{22}', body['edition']):
+        raise HTTPException(status_code=400, detail='Invalid Spotify album ID')
+    if state.track_index is None:
+        raise HTTPException(status_code=503, detail='Library index unavailable')
+    source = library_album_source(request, body['artist'], body['title'], body['edition'])
+    if source.get('status') != 'resolved' or source.get('edition') != body['edition']:
+        raise HTTPException(status_code=400, detail='Selected release unavailable')
+    from .library_catalog import filter_library_entries
+    from .album_binding_repair import repair_bindings
+    entries = filter_library_entries(entries_for_request(request), artist=body['artist'], album=body['title'])
+    try:
+        return await asyncio.to_thread(repair_bindings, library_context(), state.track_index,
+            entries, source['tracks'], body.get('files'), body.get('dry_run', True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post('/api/library/album/source')
+async def set_library_album_source_preference(request: Request) -> dict[str, Any]:
+    if principal_of(request) is None:
+        raise HTTPException(status_code=401, detail='Authentication required')
+    try:
+        data = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Invalid JSON')
+    if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() or len(data[k]) > 1024 for k in ('artist', 'title', 'edition')):
+        raise HTTPException(status_code=400, detail='Invalid source selection')
+    artist, title, edition = data['artist'], data['title'], data['edition']
+    if not re.fullmatch(r'[A-Za-z0-9]{22}', edition):
+        raise HTTPException(status_code=400, detail='Invalid Spotify album ID')
+    result = library_album_source(request, artist, title, edition)
+    if result.get('status') != 'resolved' or result.get('edition') != edition:
+        raise HTTPException(status_code=400, detail='Release does not match this library album')
+    if state.track_index is None:
+        raise HTTPException(status_code=503, detail='Library index unavailable')
+    state.track_index.set_album_preference(request_user_id(request), artist, title, edition)
+    return {'edition': edition}
+
+
+@router.get('/api/library/album/source')
+def library_album_source(request: Request, artist: str = Query(...),
+                         title: str = Query(...),
+                         edition: Optional[str] = Query(None)) -> dict[str, Any]:
+    """Expand only an album the current account may browse, by exact provenance."""
+    from .library_catalog import filter_library_entries
+    from .album_source import enrich_legacy_edition, resolve_album_source
+    rows = filter_library_entries(entries_for_request(request), artist=artist, album=title)
+    if not rows:
+        raise HTTPException(status_code=404, detail='Album not found')
+    try:
+        # Legacy metadata caches can retain deleted album-folder paths. Never
+        # recover identity or completeness from those ghost rows. The indexed
+        # provenance path retains its existing strict behaviour.
+        from .library_catalog import resolve_library_file
+        index = state.track_index
+        paths = {}
+        if index is not None and not any(index.spotify_id_for_filename(r['file']) for r in rows):
+            ctx = library_context()
+            paths = {r['file']: resolve_library_file(r['file'], ctx) for r in rows}
+            rows = [r for r in rows if paths.get(r['file']) is not None]
+            if len(rows) > 500:
+                return {'status': 'unavailable', 'tracks': []}
+            rows = [enrich_legacy_edition(r, paths[r['file']]) for r in rows]
+        if isinstance(edition, str) and not re.fullmatch(r'[A-Za-z0-9]{22}', edition):
+            return {'status': 'unavailable', 'tracks': []}
+        if not isinstance(edition, str):
+            uid = request_user_id(request) if hasattr(request, 'scope') else 0
+            edition = index.album_preference(uid, artist, title) if hasattr(index, 'album_preference') else None
+        result = resolve_album_source(rows, title, index, edition)
+        from .artist_credit_repair import source_credits
+        result['tracks'] = source_credits(result.get('tracks', []), state.playlist_spotify_cache)
+        try:
+            from .recording_equivalence import warm_source_equivalence
+            warm_source_equivalence(result, rows, index)
+        except Exception:
+            logger.debug('Equivalent source evidence unavailable')
+        if result.get('local_matches') and index is not None:
+            sources = {r['song_id']: r for r in result['tracks']}
+            for tid, files in result['local_matches'].items():
+                for filename in files:
+                    path = paths.get(filename)
+                    if path is not None:
+                        index.register_source_copy(sources[tid], filename, path)
+        return result
+    except Exception:
+        logger.opt(exception=True).debug('Could not resolve source album')
+        return {'status': 'unavailable', 'tracks': []}
+
+
+@router.post('/api/library/locations')
+async def library_locations(request: Request) -> Any:
+    """Position-preserving, offline physical copies and accessible collections."""
+    from .library_locations import track_locations
+
+    payload = await _json_object(request)
+    songs = payload.get('songs')
+    if not isinstance(songs, list) or len(songs) > 200 or any(not isinstance(s, dict) for s in songs):
+        raise HTTPException(status_code=400, detail='songs must be an array of at most 200 objects')
+    for song in songs:
+        if any(field in song and song[field] is not None
+               and (not isinstance(song[field], (str, int, float)) or isinstance(song[field], bool)
+                    or len(str(song[field])) > 4096)
+               for field in ('file', 'song_id', 'url', 'name', 'title', 'artist', 'album_artist',
+                             'album', 'album_name', 'year', 'release_date', 'track_number', 'duration')):
+            raise HTTPException(status_code=400, detail='invalid song metadata')
+        if 'artists' in song and (not isinstance(song['artists'], list) or len(song['artists']) > 100
+                or any(not isinstance(a, str) or len(a) > 4096 for a in song['artists'])):
+            raise HTTPException(status_code=400, detail='invalid artists')
+    collections = list(playlists_for_request(request))
+    # The native playlist detail helper also supports catalog-only downloads
+    # whose M3U is gone. Keep that membership, under the same sharing lens.
+    if state.playlist_catalog is not None:
+        catalog_files = {}
+        for row in state.playlist_catalog.all_track_rows():
+            catalog_files.setdefault(row['playlist_name'], []).append(row['filename'])
+        collections.extend(_filter_playlists_for([
+            dict(name=name, files=files, liked=False, manual=False)
+            for name, files in catalog_files.items()], request))
+    return {'locations': track_locations(library_context(), songs,
+        entries_for_request(request), state.downloader, state.track_index,
+        collections)}
+
+
 @router.post('/api/library/lookup')
-async def library_lookup(request: Request) -> list[dict[str, Any]]:
-    """Library rows for search/link songs that are already downloaded."""
+async def library_lookup(request: Request) -> Any:
+    """Global playable rows and optional destination-specific presence."""
 
     payload = await _json_object(request)
     songs = payload.get('songs')
     if not isinstance(songs, list):
         songs = []
-    return lookup_library_songs(
+    tracks = lookup_library_songs(
         library_context(), songs, allowed_keys=allowed_entry_keys(request)
     )
+    # Trusted source-copy bindings are produced only by the visible source
+    # endpoint, never by a client file hint. Keep local tags unchanged and add
+    # the exact source ID for consumers that need identity-based green badges.
+    index = state.track_index
+    if index is not None and any(isinstance(s, dict) and index.source_copies_for_song(s) for s in songs):
+        visible = {row['file']: row for row in entries_for_request(request)}
+        by_file = {row['file']: i for i, row in enumerate(tracks)}
+        for song in songs:
+            if not isinstance(song, dict):
+                continue
+            for filename in index.source_copies_for_song(song):
+                if filename not in visible:
+                    continue
+                from .track_index import normalize_spotify_track_id
+                row = dict(visible[filename], song_id=normalize_spotify_track_id(song))
+                if filename in by_file:
+                    tracks[by_file[filename]] = row
+                else:
+                    by_file[filename] = len(tracks)
+                    tracks.append(row)
+    if payload.get('destination_status') is not True or state.downloader is None:
+        return tracks
+    from .download_destination import destination_status
+
+    # Presence is local/path-based, not global track-id deduplication.
+    name = str(payload.get('playlist_name') or '').strip()
+    subdir = m3u.sanitize_playlist_name(name) if name else None
+    statuses = []
+    for song in songs:
+        if not isinstance(song, dict):
+            continue
+        target_song = dict(song, downtify_destination='album') if payload.get('destination') == 'album' else song
+        status = destination_status(state.downloader, target_song, subdir, track_index=state.track_index)
+        if status['file'] and not filter_paths_for_request([status['file']], request):
+            status.update(exists=False, file=None)
+        statuses.append(status)
+    return {'tracks': tracks, 'destinations': statuses}
 
 
 @router.post('/api/library/playlists')
@@ -6493,10 +7142,9 @@ async def _delete_owned_playlist(
                 drop_file_owners(keys[gone])
         if state.playlist_catalog is not None:
             state.playlist_catalog.delete_playlist(name)
-        organize = bool(
-            state.settings.get('organize_by_artist', False)
-            or state.settings.get('organize_by_album', False)
-        )
+        from downtify.folder_settings import settings_use_shared_playlists
+
+        organize = settings_use_shared_playlists(state.settings)
         shell = remove_playlist_shell(
             name, download_dir, organize_by_artist=organize
         )
@@ -6994,6 +7642,13 @@ async def update_settings_endpoint(
     before = json.dumps(state.settings, sort_keys=True, default=str)
     previous = json.loads(before)
     if isinstance(payload, dict):
+        # Validate storage toggles before any settings or downloader mutation.
+        from downtify.folder_settings import storage_update
+
+        try:
+            payload = storage_update(payload, state.settings)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         # Validated up front so a rejected save changes nothing.
         pending = {**state.settings, **payload}
         slskd_cfg = _effective_slskd_settings(pending)
@@ -7076,6 +7731,9 @@ async def update_settings_endpoint(
                 state.downloader.lyrics_providers = (
                     _effective_lyrics_providers(state.settings)
                 )
+            for key in ('folder_structure', 'playlist_use_library'):
+                if key in payload:
+                    setattr(state.downloader, key, state.settings[key])
             if 'organize_by_artist' in payload:
                 state.downloader.organize_by_artist = bool(
                     payload['organize_by_artist']

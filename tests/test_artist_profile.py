@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 from typing import Any
@@ -92,14 +93,19 @@ def app_state(monkeypatch, tmp_path):
     return downloads
 
 
+_AVRIL_KEY = 'avril lavigne--' + hashlib.sha256(b'avril lavigne').hexdigest()
+
+
 # ── downtify/artist_profile.py ──────────────────────────────────────────
 
 
-def test_path_for_photo_uses_sanitized_name(tmp_path):
+def test_path_for_photo_uses_collision_safe_name(tmp_path):
     path = artist_profile.image_path_for(
         tmp_path, 'Avril/Lavigne', artist_profile.KIND_PHOTO
     )
-    assert path == tmp_path / '.metadata/ArtistImage/AvrilLavigne.jpg'
+    digest = hashlib.sha256(b'avril/lavigne').hexdigest()
+    assert path == tmp_path / '.metadata/ArtistImage' / f'avrillavigne--{digest}.jpg'
+    assert path != artist_profile.image_path_for(tmp_path, 'AvrilLavigne', artist_profile.KIND_PHOTO)
 
 
 def test_path_for_banner_uses_banner_suffix(tmp_path):
@@ -108,7 +114,7 @@ def test_path_for_banner_uses_banner_suffix(tmp_path):
     )
     assert (
         path
-        == tmp_path / '.metadata/ArtistBannerImage/Avril Lavigne.banner.jpg'
+        == tmp_path / '.metadata/ArtistBannerImage' / f'{_AVRIL_KEY}.banner.jpg'
     )
 
 
@@ -125,7 +131,7 @@ def test_save_bytes_then_public_url_roundtrip(tmp_path):
     url = artist_profile.save_image(
         tmp_path, 'Avril Lavigne', artist_profile.KIND_PHOTO, _TINY_PNG
     )
-    assert url == '/downloads/.metadata/ArtistImage/Avril Lavigne.jpg'
+    assert url == f'/downloads/.metadata/ArtistImage/{_AVRIL_KEY}.jpg'
     assert (
         artist_profile.image_url_for(
             tmp_path, 'Avril Lavigne', artist_profile.KIND_PHOTO
@@ -165,7 +171,7 @@ def test_fetch_and_save_downloads_and_stores(tmp_path):
         )
     assert (
         url
-        == '/downloads/.metadata/ArtistBannerImage/Avril Lavigne.banner.jpg'
+        == f'/downloads/.metadata/ArtistBannerImage/{_AVRIL_KEY}.banner.jpg'
     )
 
 
@@ -199,7 +205,7 @@ def test_artist_art_endpoint_reports_existing_and_missing(app_state):
     )
     result = api.artist_art_endpoint(name='Avril Lavigne')
     assert result['photo_url'] == (
-        '/downloads/.metadata/ArtistImage/Avril Lavigne.jpg'
+        f'/downloads/.metadata/ArtistImage/{_AVRIL_KEY}.jpg'
     )
     assert result['banner_url'] is None
 
@@ -259,7 +265,7 @@ def test_bulk_endpoint_reports_each_artist(app_state):
     assert version
     assert result == {
         'Avril Lavigne': {
-            'photo_url': '/downloads/.metadata/ArtistImage/Avril Lavigne.jpg',
+            'photo_url': f'/downloads/.metadata/ArtistImage/{_AVRIL_KEY}.jpg',
             'photo_version': version,
             'banner_url': None,
             'banner_version': None,
@@ -412,7 +418,7 @@ def test_from_url_endpoint_saves_and_returns_url(app_state):
     with patch('downtify.artist_profile.httpx.get', return_value=resp):
         result = asyncio.run(api.artist_art_from_url_endpoint(request))
     assert (
-        result['url'] == '/downloads/.metadata/ArtistImage/Avril Lavigne.jpg'
+        result['url'] == f'/downloads/.metadata/ArtistImage/{_AVRIL_KEY}.jpg'
     )
 
 
@@ -435,7 +441,7 @@ def test_upload_endpoint_saves_raw_body(app_state):
         )
     )
     assert result['url'] == (
-        '/downloads/.metadata/ArtistBannerImage/Avril Lavigne.banner.jpg'
+        f'/downloads/.metadata/ArtistBannerImage/{_AVRIL_KEY}.banner.jpg'
     )
 
 
@@ -1327,6 +1333,11 @@ def _fake_track_index(spotify_track_id='track123'):
 
 def test_ensure_profile_noop_when_file_already_exists(tmp_path):
     artist_profile.save_bio(tmp_path, 'Avril Lavigne', 'Existing bio.')
+    # A linked profile is a full no-op; an unlinked one only retries its
+    # Spotify link (tests/test_artist_spotify_relink.py).
+    linked = artist_profile.load_profile(tmp_path, 'Avril Lavigne')
+    linked['platforms_id']['spotify'] = 'A' * 22
+    artist_profile._save_profile(tmp_path, 'Avril Lavigne', linked)
     with (
         patch(
             'downtify.artist_profile.spotify.primary_artist_id_from_track_id'
@@ -1658,7 +1669,7 @@ def test_photo_proxy_endpoint_prefers_saved_photo(app_state, monkeypatch):
 
     monkeypatch.setattr(api.artist_photo_proxy, 'fetch_proxied_photo', boom)
     resp = api.artist_photo_proxy_endpoint(name='Avril Lavigne')
-    assert resp.path.name == 'Avril Lavigne.jpg'
+    assert resp.path == artist_profile.image_path_for(app_state, 'Avril Lavigne', artist_profile.KIND_PHOTO)
     assert resp.headers['cache-control'] == 'no-cache'
 
 
@@ -1707,7 +1718,7 @@ def test_photo_proxy_endpoint_saved_photo_beats_the_given_url(
             'https://cdn-images.dzcdn.net/images/artist/abc/250x250.jpg'
         ),
     )
-    assert resp.path.name == 'Avril Lavigne.jpg'
+    assert resp.path == artist_profile.image_path_for(app_state, 'Avril Lavigne', artist_profile.KIND_PHOTO)
 
 
 @pytest.mark.parametrize(
@@ -2809,20 +2820,18 @@ def test_bio_preview_endpoint_rejects_a_blank_name(app_state):
 # ── artists named as the disk keeps them (AC/DC -> ACDC) ───────────────
 
 
-def test_a_profile_saved_as_ac_dc_is_the_one_read_for_acdc(tmp_path):
-    """The files are named after the sanitized name, so the two spellings
-    of one artist already share every sidecar."""
-
+def test_a_profile_saved_as_ac_dc_is_not_read_for_acdc(tmp_path):
+    """Sanitized basenames must not merge different literal identities."""
     artist_profile.save_bio(tmp_path, 'AC/DC', 'Thunderstruck.')
-    assert artist_profile.load_profile(tmp_path, 'ACDC')['bio'] == (
-        'Thunderstruck.'
-    )
-    assert artist_profile._profile_path_for(tmp_path, 'AC/DC') == (
+    artist_profile.save_bio(tmp_path, 'ACDC', 'Other artist.')
+    assert artist_profile.load_profile(tmp_path, 'AC/DC')['bio'] == 'Thunderstruck.'
+    assert artist_profile.load_profile(tmp_path, 'ACDC')['bio'] == 'Other artist.'
+    assert artist_profile._profile_path_for(tmp_path, 'AC/DC') != (
         artist_profile._profile_path_for(tmp_path, 'ACDC')
     )
 
 
-def test_the_youtube_photo_fallback_matches_the_name_the_disk_kept(tmp_path):
+def test_the_youtube_photo_fallback_rejects_punctuation_collision(tmp_path):
     with (
         patch(
             'downtify.artist_profile.providers.search_artists',
@@ -2833,9 +2842,7 @@ def test_the_youtube_photo_fallback_matches_the_name_the_disk_kept(tmp_path):
         artist_profile._seed_image_from_streams(
             tmp_path, 'ACDC', artist_profile.KIND_PHOTO, None
         )
-    assert mock_save.call_count == 1
-    assert mock_save.call_args.args[3] == 'https://yt/x.jpg'
-    assert mock_save.call_args.kwargs['source'] == 'youtube'
+    mock_save.assert_not_called()
 
 
 def test_the_youtube_photo_fallback_ignores_a_different_artist(tmp_path):

@@ -23,7 +23,7 @@
 
     <div
       v-if="expanded"
-      class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6"
+      class="tile-grid"
     >
       <MediaTile
         v-for="item in shown"

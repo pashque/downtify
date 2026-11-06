@@ -1,3 +1,5 @@
+import en from './en.js'
+
 export default {
   language: {
     name: 'Ελληνικά',
@@ -44,6 +46,7 @@ export default {
     signOutAs: 'Αποσύνδεση ({name})',
   },
   actions: {
+    downloadFlac: 'Λήψη FLAC',
     play: 'Αναπαραγωγή',
     playAll: 'Αναπαραγωγή όλων',
     playItem: 'Αναπαραγωγή {name}',
@@ -124,6 +127,7 @@ export default {
     recent: 'Πρόσφατες αναζητήσεις',
     inLibrary: 'Στη βιβλιοθήκη',
     explicit: 'Ακατάλληλο',
+    clean: 'Χωρίς ακατάλληλο περιεχόμενο',
     openSource: 'Άνοιγμα στο YouTube Music',
     typeAlbum: 'Άλμπουμ',
     typeSingle: 'Single',
@@ -207,6 +211,10 @@ export default {
     credits: 'Συντελεστές',
   },
   link: {
+    findSpotify: 'Εύρεση στο Spotify',
+    findYoutube: 'Εύρεση στο YouTube Music',
+    notOnSpotify: 'Δεν βρέθηκε στο Spotify',
+    notOnYoutubeMusic: 'Δεν βρέθηκε στο YouTube Music',
     resolving: 'Ανάγνωση συνδέσμου…',
     failed: 'Δεν ήταν δυνατό το άνοιγμα του συνδέσμου',
     untitled: 'Χωρίς τίτλο',
@@ -439,12 +447,40 @@ export default {
   },
   album: {
     kicker: 'Άλμπουμ',
+    kinds: {
+      album: 'Άλμπουμ',
+      single: 'Single',
+      ep: 'EP',
+      compilation: 'Συλλογή',
+    },
+    downloadFullKind: {
+      album: "Λήψη ολόκληρου του άλμπουμ",
+      single: "Λήψη ολόκληρου του single",
+      ep: "Λήψη ολόκληρου του EP",
+      compilation: "Λήψη ολόκληρης της συλλογής",
+    },
+    downloadAgainKind: {
+      album: "Λήψη άλμπουμ ξανά",
+      single: "Λήψη single ξανά",
+      ep: "Λήψη EP ξανά",
+      compilation: "Λήψη συλλογής ξανά",
+    },
+    downloadKind: {
+      album: "Λήψη άλμπουμ",
+      single: "Λήψη single",
+      ep: "Λήψη EP",
+      compilation: "Λήψη συλλογής",
+    },
+    loadingTracks: "Φόρτωση πλήρους λίστας…",
+    downloadMissing: 'Λήψη κομματιών που λείπουν',
     notFound: 'Το άλμπουμ δεν βρέθηκε',
     moreBy: 'Περισσότερα από {artist}',
     searchMore: 'Αναζήτηση στο YouTube Music',
     delete: 'Διαγραφή άλμπουμ',
   },
   artist: {
+    availableToDownload: 'Διαθέσιμα για λήψη',
+    singlesAndEps: 'Σινγκλ και EP',
     kicker: 'Καλλιτέχνης',
     notFound: 'Ο καλλιτέχνης δεν βρέθηκε',
     findMore: 'Βρες περισσότερα',
@@ -557,12 +593,23 @@ export default {
     nothingYetManualHint: 'Προσθέστε κομμάτια από τη βιβλιοθήκη.',
   },
   track: {
+    codec: 'Κωδικοποιητής',
+    bitrate: 'Ρυθμός bit',
+    sampleRate: 'Ρυθμός δειγματοληψίας',
+    channels: 'Κανάλια',
+    channelMode: 'Λειτουργία καναλιών',
+    bitDepth: 'Βάθος bit',
+    encoding: 'Κωδικοποίηση',
+    lossless: 'Χωρίς απώλειες',
+    lossy: 'Με απώλειες',
+    library: 'Βιβλιοθήκη',
     title: 'Τίτλος',
     artist: 'Καλλιτέχνης',
     album: 'Άλμπουμ',
     trackNumber: 'Κομμάτι',
     year: 'Έτος',
     length: 'Διάρκεια',
+    time: 'Χρόνος',
     format: 'Μορφή',
     size: 'Μέγεθος',
     added: 'Προστέθηκε',
@@ -765,7 +812,7 @@ export default {
       shared: 'Κοινοποιήθηκε η «{name}»',
       public: 'Η «{name}» είναι πλέον δημόσια',
     },
-    share: 'Κοινοποίηση…',
+    share: 'Κοινοποίηση',
     new: 'Νέα',
     following: 'Ακολουθείται',
     follow: 'Ακολούθηση',
@@ -795,6 +842,16 @@ export default {
     showMore: 'Εμφάνιση {count} ακόμη',
   },
   settings: {
+    // English fallbacks for the folder controls, pending translation.
+    folderStructure: en.settings.folderStructure,
+    folderStructureOnHint: en.settings.folderStructureOnHint,
+    folderStructureOffHint: en.settings.folderStructureOffHint,
+    playlistUseLibrary: en.settings.playlistUseLibrary,
+    playlistLibraryHint: en.settings.playlistLibraryHint,
+    playlistSeparateHint: en.settings.playlistSeparateHint,
+    playlistFolderHint: en.settings.playlistFolderHint,
+    playlistFlatHint: en.settings.playlistFlatHint,
+    legacyFoldersHint: en.settings.legacyFoldersHint,
     apps: 'Εφαρμογές',
     title: 'Ρυθμίσεις',
     subtitle:

@@ -7,6 +7,7 @@
       :missing="t('playlists.notFound')"
     >
       <CollectionHero
+        :playing="isThisPlaying"
         :title="playlist.title"
         :kicker="t('playlists.kicker')"
         :covers="playlist.covers"
@@ -22,15 +23,10 @@
           >
             <AppIcon name="spotify" :size="14" />Spotify
           </span>
-          {{ facts }}
+          <span :class="batch ? 'max-md:block' : ''">{{ facts }}</span>
           <template v-if="sharingLine"> · {{ sharingLine }}</template>
         </template>
         <template #actions>
-          <PlaylistStatus
-            v-if="batch?.expected_count"
-            :playlist="playlist"
-            class="w-full max-w-sm basis-full"
-          />
           <PlayButton
             :label="t('actions.playItem', { name: playlist.title })"
             :playing="isThisPlaying"
@@ -43,11 +39,13 @@
             size="lg"
             round
             :disabled="!playlist.tracks.length"
-            @click="playlistActions.play(playlist, { shuffled: true })"
+            :active="player.shuffle.value"
+            toggle
+            @click="player.toggleShuffle()"
           />
           <UiButton
             v-if="batch?.missing_count"
-            variant="primary"
+            variant="ghost"
             icon="download"
             @click="playlistActions.downloadMissing(playlist)"
           >
@@ -109,15 +107,7 @@
           >
             {{ t('sharing.detach') }}
           </UiButton>
-          <UiButton
-            v-if="playlist.tracks.length"
-            variant="ghost"
-            icon="zip"
-            class="max-sm:hidden"
-            @click="actions.downloadZip(playlist.tracks)"
-          >
-            {{ t('library.downloadZip') }}
-          </UiButton>
+          <TrackSortSelect v-if="playlist.tracks.length" v-model="trackSort" playlist-order />
           <UiMenu :items="menu" :label="t('common.more')" size="lg" />
         </template>
       </CollectionHero>
@@ -126,12 +116,11 @@
         class="mx-auto flex max-w-[1680px] flex-col gap-10 px-4 sm:px-6 lg:px-10"
       >
         <div v-if="playlist.tracks.length" class="flex flex-col gap-3">
-          <div class="flex justify-end">
-            <TrackSortSelect v-model="trackSort" playlist-order />
-          </div>
           <TrackList
             v-model:sort="trackSort"
             :tracks="sortedTracks"
+            show-album
+            :show-added="batch?.monitored === true && !playlist.manual"
             :context="playlistActions.contextFor(playlist)"
           />
         </div>
@@ -178,7 +167,7 @@
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-semibold">{{ song.name }}</p>
                 <p class="truncate text-[13px] text-muted">
-                  {{ (song.artists || []).join(', ') || song.artist }}
+                  <ArtistCredits :artists="song.artists" :artist="song.artist" />
                 </p>
               </div>
               <DownloadState :song="song" />
@@ -191,6 +180,7 @@
 </template>
 
 <script setup>
+import ArtistCredits from '/src/components/library/ArtistCredits.vue'
 import { computed, ref, watch } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useRoute, useRouter } from 'vue-router'
@@ -211,6 +201,7 @@ import DownloadState from '/src/components/search/DownloadState.vue'
 import API from '/src/model/api'
 import { useAccount } from '/src/model/account'
 import { useLibrary } from '/src/model/library'
+import { useLikes } from '/src/model/likes'
 import { usePlayer } from '/src/model/player'
 import { usePlaylistActions } from '/src/model/playlistActions'
 import { useTrackActions } from '/src/model/trackActions'
@@ -238,9 +229,16 @@ const trackSort = useLocalStorage('downtify-playlist-track-sort', {
   key: 'order',
   dir: 'asc',
 })
-const sortedTracks = computed(() =>
-  sortTracks(playlist.value?.tracks || [], trackSort.value)
-)
+// Liked songs follow the hearts at once: an unliked song leaves the list
+// immediately instead of waiting for the library to reload.
+const likes = useLikes()
+const visibleTracks = computed(() => {
+  const list = playlist.value?.tracks || []
+  return playlist.value?.liked && likes.loaded?.value !== false
+    ? list.filter((track) => likes.isLiked(track.file))
+    : list
+})
+const sortedTracks = computed(() => sortTracks(visibleTracks.value, trackSort.value))
 
 const canShare = computed(
   () =>

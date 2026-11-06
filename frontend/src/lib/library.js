@@ -14,18 +14,18 @@ export function compareText(a, b) {
   return collator.compare(String(a || ''), String(b || ''))
 }
 
-function splitArtists(artist) {
-  const text = String(artist || '').trim()
-  if (!text) return []
-  for (const sep of [';', ' / ', ', ']) {
-    if (text.includes(sep)) {
-      return text
-        .split(sep)
-        .map((part) => part.trim())
+function splitArtists(artist, structured = []) {
+  const names = Array.isArray(structured)
+    ? structured
+        .map((value) => typeof value === 'string' ? value : value?.name)
+        .map((name) => String(name || '').trim())
         .filter(Boolean)
-    }
-  }
-  return [text]
+    : []
+  // Only legacy semicolons encode boundaries. Commas, slashes and
+  // ampersands can belong to a single artist's name.
+  return names.length
+    ? names
+    : String(artist || '').split(';').map((name) => name.trim()).filter(Boolean)
 }
 
 const VARIOUS_ARTISTS = new Set(['various artists', 'various'])
@@ -68,16 +68,20 @@ export function normalizeTrack(row) {
   const file = String(raw.file || '')
   const fallback = basenameTitle(file)
   const artist = String(raw.artist || '').trim() || fallback.artist
-  const artists = splitArtists(artist)
+  const artists = splitArtists(artist, raw.artists)
   const albumArtist = groupingArtistName({
     albumArtist: String(raw.album_artist || '').trim(),
     artists,
     artist,
   })
   return {
+    ...songIdentityFields(raw),
     file,
     title: String(raw.title || '').trim() || fallback.title,
-    artist,
+    // Display text: tags separate featured artists with ";", the app shows
+    // ", " everywhere. `artists` keeps the structured list (literal names
+    // such as "Earth, Wind & Fire" are never split here).
+    artist: artists.join(', '),
     artists,
     album: String(raw.album || '').trim(),
     albumArtist,
@@ -85,6 +89,7 @@ export function normalizeTrack(row) {
     year: String(raw.year || ''),
     duration: Number(raw.duration) || 0,
     explicit: Boolean(raw.explicit),
+    release_type: String(raw.release_type || ''),
     // Admins only: why users can't see this track ('track', 'album' or
     // 'artist' - the widest rule that hides it), '' when they can.
     hiddenBy: String(raw.hidden_by || ''),
@@ -101,8 +106,8 @@ export function normalizeTrack(row) {
 
 export function albumKey(albumArtist, album) {
   return JSON.stringify([
-    String(albumArtist || '').toLowerCase(),
-    String(album || '').toLowerCase(),
+    artistKey(albumArtist),
+    artistKey(album),
   ])
 }
 
@@ -130,6 +135,7 @@ export function groupAlbums(tracks) {
         title: track.album,
         artist,
         year: '',
+        release_type: track.release_type || '',
         tracks: [],
         cover: '',
         added: 0,
@@ -158,7 +164,9 @@ export function groupAlbums(tracks) {
 }
 
 export function artistKey(name) {
-  return String(name || '').toLowerCase()
+  // Identity is NFKC + lower (not casefold), with whitespace normalized.
+  // Punctuation, symbols and accents are meaningful; fold() is search-only.
+  return String(name || '').normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim()
 }
 
 /** Group tracks by (album) artist, with their albums attached. */
@@ -400,35 +408,103 @@ export function filterItems(items, query, fields) {
   })
 }
 
-/** Loose "is this song already downloaded?" key: artist + title. */
-// Bracketed tags that don't make a different recording: guests and
-// remasters. Mixes, live and acoustic versions stay distinct.
-const SAME_SONG_TAG = /[([](?:(?:feat|ft|with)\b|[^)\]]*remaster)[^)\]]*[)\]]/g
-
+/** Punctuation-preserving lead artist + exact title identity. */
 export function songKey(artist, title) {
-  const clean = (text) =>
-    fold(text)
-      .replace(SAME_SONG_TAG, ' ')
-      .replace(/\s(feat|ft)\.?\s.*$/, ' ')
-      .replace(/\s-\s[^-]*remaster[^-]*$/, ' ')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .trim()
-  const first = String(artist || '')
-    .split(/,|;| & /)[0]
-    .trim()
-  return `${clean(first)}|${clean(title)}`
+  const first = Array.isArray(artist)
+    ? splitArtists('', artist)[0] || ''
+    : splitArtists(artist)[0] || ''
+  // Encode components, rather than joining on a symbol valid in either name.
+  return JSON.stringify([artistKey(first), artistKey(title)])
+}
+
+/** Keep source identity when a catalog song becomes a local/player track. */
+export function songIdentityFields(song) {
+  const fields = {}
+  for (const field of ['song_id', 'provider', 'source', 'source_id', 'spotify_id', 'deezer_id', 'youtube_id']) {
+    if (song?.[field]) fields[field] = song[field]
+  }
+  const url = song?.source_url || song?.url
+  if (/^https?:\/\//i.test(url || '')) fields.source_url = url
+  return fields
+}
+
+/** Provider-scoped IDs; unqualified IDs never share another provider's namespace. */
+export function providerSongKey(song) {
+  if (!song) return ''
+  for (const [field, provider] of [['spotify_id', 'spotify'], ['deezer_id', 'deezer'], ['youtube_id', 'youtube']]) {
+    if (song[field]) return JSON.stringify([provider, String(song[field])])
+  }
+  const url = String(song.source_url || song.url || '')
+  const spotify = url.match(/^https?:\/\/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([^/?#]+)/i)
+  if (spotify) return JSON.stringify(['spotify', spotify[1]])
+  const deezer = url.match(/^https?:\/\/(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?track\/(\d+)/i)
+  if (deezer) return JSON.stringify(['deezer', deezer[1]])
+  const youtube = url.match(/^https?:\/\/(?:music\.|www\.)?youtube\.com\/watch\?.*?v=([^&#]+)/i)
+    || url.match(/^https?:\/\/youtu\.be\/([^/?#]+)/i)
+  if (youtube) return JSON.stringify(['youtube', youtube[1]])
+  const id = String(song.song_id || song.source_id || '')
+  if (!id) return ''
+  const prefixed = id.match(/^(spotify|deezer|youtube|youtube-music)[:-](.+)$/i)
+  let provider = String(song.provider || song.source || '').toLowerCase()
+  if (prefixed) provider = prefixed[1].toLowerCase()
+  if (provider === 'youtube-music' || provider === 'youtube_music') provider = 'youtube'
+  if (!provider) provider = /^[A-Za-z0-9]{22}$/.test(id) ? 'spotify'
+    : /^[A-Za-z0-9_-]{11}$/.test(id) ? 'youtube' : 'catalog'
+  return JSON.stringify([provider, prefixed ? prefixed[2] : id])
+}
+
+/** Prefer exact IDs; only an unambiguous exact textual identity may fall back. */
+export function findSongTrack(tracks, artist, title, song = null) {
+  const id = providerSongKey(song)
+  if (id) {
+    const exact = (tracks || []).find(track => providerSongKey(track) === id)
+    if (exact) return exact
+  }
+  const key = songKey(artist, title)
+  const matches = (tracks || []).filter(track =>
+    songKey(track.artists?.length ? track.artists : track.artist, track.title) === key
+    && (!id || !providerSongKey(track)))
+  const ids = new Set(matches.map(providerSongKey).filter(Boolean))
+  if (ids.size > 1) return null
+  return matches[0] || null
+}
+
+/** Exact provider keys plus unambiguous textual keys (legacy copies first). */
+export function indexTracksBySong(tracks) {
+  const index = new Map()
+  const groups = new Map()
+  for (const track of tracks || []) {
+    const key = songKey(track.artists?.length ? track.artists : track.artist, track.title)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(track)
+    const id = providerSongKey(track)
+    if (id && !index.has(`id:${id}`)) index.set(`id:${id}`, track)
+  }
+  for (const [key, group] of groups) {
+    if (new Set(group.map(providerSongKey).filter(Boolean)).size <= 1) index.set(key, group[0])
+  }
+  return index
 }
 
 /**
- * `songKey` -> library track, for finding the file behind a song that is
- * already downloaded (search and link results are songs, not files). The
- * first track wins when two share a key.
+ * One file per song for an album's play order: the same recording can be
+ * in the album folder and in a playlist folder. The copy inside the album
+ * artist's folder wins; otherwise the first one found.
  */
-export function indexTracksBySong(tracks) {
-  const index = new Map()
+export function dedupeAlbumTracks(tracks) {
+  const picked = new Map()
   for (const track of tracks || []) {
-    const key = songKey(track.artist, track.title)
-    if (!index.has(key)) index.set(key, track)
+    const id = providerSongKey(track)
+    const key = JSON.stringify([
+      id ? `id:${id}` : `song:${songKey(track.artists?.length ? track.artists : track.artist, track.title)}`,
+      track.trackNumber || 0,
+      // ID-less copies may be different editions; retain known version facts.
+      ...(id ? [] : [artistKey(track.album), String(track.year || ''), track.explicit ?? null, track.release_type || '']),
+    ])
+    const prev = picked.get(key)
+    const canonical = (t) => String(t.file || '').startsWith(`${t.albumArtist}/`)
+    if (!prev || (!canonical(prev) && canonical(track))) picked.set(key, track)
   }
-  return index
+  const keep = new Set(picked.values())
+  return (tracks || []).filter((track) => keep.has(track))
 }

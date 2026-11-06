@@ -7,6 +7,7 @@
 // The player keeps one track ahead resolved (see model/player.js), so
 // the next song starts without waiting too.
 import { ref } from 'vue'
+import { providerSongKey, songKey, songIdentityFields } from '/src/lib/library'
 
 import { usePlayer } from '/src/model/player'
 import {
@@ -26,12 +27,15 @@ const resolvingKey = ref('')
 export function isStreamingSong(song) {
   const current = usePlayer().currentTrack.value
   if (!current?.stream) return false
+  const sourceId = providerSongKey(song)
+  const currentId = providerSongKey(current)
+  if (sourceId && currentId) return sourceId === currentId
   const videoId = directVideoId(song)
   if (videoId) return current.video_id === videoId
   const artist = songArtist(song)
   const title = songTitle(song)
   if (!artist || !title) return false
-  return current.artist === artist && current.title === title
+  return songKey(current.artist, current.title) === songKey(artist, title)
 }
 
 /** Whether this row's stream is being resolved right now. */
@@ -43,6 +47,7 @@ export function resolvingFor(song) {
 /** A player track streaming `song` once `url` is known. */
 export function streamTrack(song, url, videoId) {
   return {
+    ...songIdentityFields(song),
     file: '',
     stream: true,
     video_id: videoId,

@@ -635,6 +635,8 @@ def build_app() -> FastAPI:
         ),
         lyrics_providers=api._effective_lyrics_providers(api.state.settings),
         lyrics_cache=api.state.lyrics_cache,
+        folder_structure=api.state.settings.get('folder_structure'),
+        playlist_use_library=api.state.settings.get('playlist_use_library', True),
         organize_by_artist=bool(
             api.state.settings.get('organize_by_artist', False)
         ),

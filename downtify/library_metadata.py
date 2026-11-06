@@ -30,10 +30,72 @@ def _split_artists(artist: str) -> list[str]:
     text = artist.strip()
     if not text:
         return []
-    for sep in (';', '/', ',', '\\'):
-        if sep in text:
-            return [part.strip() for part in text.split(sep) if part.strip()]
-    return [text]
+    # Only the legacy internal separator is unambiguous. Commas and
+    # slashes are part of names (Tyler, The Creator; AC/DC).
+    return [part.strip() for part in text.split(';') if part.strip()]
+
+
+def _structured_artists(path: Path, audio: Any) -> list[str]:
+    """The multi-value ARTISTS tag (MusicBrainz/Picard convention) Downtify
+    writes next to a comma-joined display artist; [] when absent."""
+
+    try:
+        values: Any = None
+        suffix = path.suffix.casefold()
+        if suffix == '.mp3':
+            frame = ID3(str(path)).get('TXXX:ARTISTS')
+            values = list(frame.text) if frame is not None else None
+        elif suffix in {'.m4a', '.mp4', '.aac', '.alac'}:
+            raw = MutagenFile(str(path))
+            values = (raw.tags or {}).get('----:com.apple.iTunes:ARTISTS') if raw is not None else None
+        else:
+            # Vorbis comments (FLAC, Ogg, Opus).
+            raw = MutagenFile(str(path))
+            tags = getattr(raw, 'tags', None)
+            values = (tags.get('artists') or tags.get('ARTISTS')) if tags is not None else None
+        if not values:
+            return []
+        out = []
+        for value in values if isinstance(values, list) else [values]:
+            text = value.decode('utf-8', 'replace') if isinstance(value, bytes) else str(value)
+            if text.strip() and text.strip() not in out:
+                out.append(text.strip())
+        return out
+    except Exception:
+        return []
+
+
+def read_release_type(path: Path) -> str:
+    """Read only authoritative release tags; unknown values stay unknown.
+
+    Easy tags omit ID3 custom frames and MP4 freeform atoms, so use the
+    native container tags. Never infer a release kind from title or size.
+    """
+    try:
+        if path.suffix.casefold() == '.mp3':
+            frame = ID3(str(path)).get('TXXX:MusicBrainz Album Type')
+            values = frame.text if frame is not None else []
+        else:
+            audio = MutagenFile(str(path))
+            tags = getattr(audio, 'tags', None)
+            if tags is None:
+                return ''
+            values = (
+                tags.get('----:com.apple.iTunes:MusicBrainz Album Type')
+                or tags.get('releasetype')
+                or tags.get('musicbrainz_albumtype')
+                or []
+            )
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+        for value in values:
+            text = value.decode('utf-8', 'replace') if isinstance(value, bytes) else str(value)
+            kind = text.strip().casefold()
+            if kind in {'album', 'single', 'ep', 'compilation'}:
+                return kind
+    except Exception:
+        pass
+    return ''
 
 
 def _track_number(value: Any) -> int:
@@ -129,7 +191,8 @@ def read_audio_metadata(path: Path) -> dict[str, Any]:
     """Return display tags read from ``path``.
 
     ``title``, ``artist``, ``artists`` and ``album``, plus
-    ``album_artist``, ``track_number`` (0 when unknown), ``year`` and
+    ``album_artist``, ``release_type`` (authoritative tag, '' when unknown),
+    ``track_number`` (0 when unknown), ``year`` and
     ``duration`` in seconds (0 when unknown), plus the audio format:
     ``codec``, ``bitrate``, ``sample_rate`` and ``channels`` (see
     :func:`audio_format`), and ``explicit`` (:func:`read_explicit`).
@@ -140,6 +203,7 @@ def read_audio_metadata(path: Path) -> dict[str, Any]:
         'artist': '',
         'artists': [],
         'album': '',
+        'release_type': '',
         'album_artist': '',
         'track_number': 0,
         'year': '',
@@ -197,12 +261,29 @@ def read_audio_metadata(path: Path) -> dict[str, Any]:
             year = _year(id3.get('TDRC'))
             genre = _tag_text(id3.get('TCON'))
 
-    artists = _split_artists(artist)
+    structured = _structured_artists(path, audio)
+    # Repair only an exact adjacent sequence attested by the album credit.
+    # A guest on another artist's album has no such evidence; leave it alone.
+    if structured and album_artist:
+        for start in range(len(structured)):
+            for end in range(start + 2, len(structured) + 1):
+                if ', '.join(structured[start:end]) == album_artist:
+                    structured = structured[:start] + [album_artist] + structured[end:]
+                    break
+            else:
+                continue
+            break
+    if structured:
+        # Downtify's internal artist list: one "; "-separated string, never
+        # shown; tags themselves carry ", " (display) + ARTISTS (list).
+        artist = '; '.join(structured)
+    artists = structured or _split_artists(artist)
     return {
         'title': title,
         'artist': artist,
         'artists': artists,
         'album': album,
+        'release_type': read_release_type(path),
         'album_artist': album_artist,
         'track_number': track_number,
         'year': year,
@@ -244,6 +325,8 @@ def library_entry_for_file(
         'title': title,
         'artist': artist,
         'album': album,
+        'release_type': str(meta.get('release_type') or ''),
+        'artists': list(meta.get('artists') or _split_artists(artist)),
         'album_artist': str(meta.get('album_artist') or '').strip(),
         'track_number': int(meta.get('track_number') or 0),
         'year': str(meta.get('year') or ''),

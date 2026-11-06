@@ -812,6 +812,13 @@ async function loadAlbums() {
 
 async function loadAlbum() {
   await album.load(albumId.value)
+  const loaded = album.data.value
+  if (loaded?.tracks?.length) {
+    await library.lookupSongs(loaded.tracks, { destination: true })
+    if (album.data.value === loaded) {
+      album.data.value = { ...loaded, tracks: loaded.tracks.map(song => ({ ...song })) }
+    }
+  }
   await nextTick()
   if (!revealMarkedTrack() && tracksEl.value) tracksEl.value.scrollTop = 0
   playPickedTrack()

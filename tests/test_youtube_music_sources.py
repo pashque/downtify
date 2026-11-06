@@ -242,7 +242,11 @@ def test_upload_title_noise_is_stripped(fake_ytm):
     )
     (song,) = providers.playlist_tracks_from_id(PLAYLIST_ID)
     assert song['name'] == 'Song'
-    assert song['artists'] == ['Artist One', 'Artist Two']
+    # An upload's comma-separated display is ambiguous, not a structured
+    # list: Earth, Wind & Fire and Tyler, The Creator are literal names.
+    assert song['artists'] == ['Artist One, Artist Two']
+    assert song['artist_ids'] == ['']
+    assert song['artists_structured'] is False
 
 
 def test_version_suffix_after_dash_is_not_taken_for_an_artist(fake_ytm):

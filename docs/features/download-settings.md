@@ -29,9 +29,13 @@ Available for lossy formats (MP3, M4A, OGG, OPUS). FLAC ignores this setting.
 
 The downloaded audio is encoded at the bitrate you pick, for every lossy format. If the audio YouTube serves already has the target codec at roughly that bitrate (e.g. its ~128 kbps AAC stream for **M4A @ 128**), it's kept as-is instead of being re-encoded, since a re-encode would only lose quality.
 
-::: info A higher bitrate doesn't add quality
-YouTube's audio tops out at roughly **128–160 kbps** (AAC or Opus), and Downtify always downloads the best stream available. Encoding it at 256 or 320 kbps gives larger files that preserve that source faithfully, but can't restore detail the source never had. Pick a lower bitrate if file size matters more to you.
+::: info Output format is not source quality
+The YouTube path requests `bestaudio/best` and converts that stream using FFmpeg. YouTube sources are lossy AAC/Opus; **MP3 320** is the output encoding rate, not proof of a 320 kbps source. Re-encoding lossy audio can introduce further loss. **FLAC** stores the decoded source without further lossy compression, but cannot restore information already removed by YouTube. A FLAC file reporting 24-bit/48 kHz is not proof of a 24-bit lossless master.
+
+The exact available stream depends on the recording, authenticated account and extractor client. The original guide's roughly 128–160 kbps description is not a universal service limit: YouTube Music's official Premium high-quality setting supports up to 256 kbps AAC/Opus. Neither setting establishes what this downloader actually received. Historical input bitrate is unknown unless original stream metadata was retained. slskd can instead supply an existing native file, whose provenance/quality is a separate matter.
 :::
+
+Release pages offer one download action: **Download album / single / EP** when the canonical release folder is empty, **Download full album / single / EP** when it is partial, and, on **Link pages only**, **Download album / single / EP again** when complete. Complete Library releases hide the header download action. Link releases verified locally also show the shared green Play button; files in playlists count independently of whether the canonical album folder is complete. Download labels wait for destination results instead of flashing a speculative action, and the shared round-arrow indicator spins while album or artist information is being updated. Completing a partial release queues only missing canonical-folder tracks; downloading again explicitly reacquires the full release. Track selection replaces that action with **Download selected (N)**. There is no automatic Download FLAC offer on downloaded albums or their track menus: converting a lossy source to FLAC cannot restore fidelity. Output-format settings and request-local format overrides remain supported without changing or deleting existing music.
 
 ## Output filename template
 
@@ -163,6 +167,10 @@ When a song is skipped:
 **Settings → Downloads → Longest track taken** caps the track length for downloads *and* streams alike (default **10 minutes**, `0` takes everything). Longer songs are refused before anything is fetched, with a *"tracks over … are not downloaded"* queue error — hour-long mixes and uploads are never what a library track should be. The same cap guards streaming: a longer track is refused with a `400` (callers that know its length pass `duration`, and the cached file is probed either way), so long uploads never accumulate in the stream cache either. Already-downloaded files and podcast episodes (which are routinely longer) are unaffected.
 
 ## Audio provider
+
+Automatic matching treats a known source duration as a hard constraint: candidates more than 10 seconds away are rejected, rather than kept as a weak fallback. YouTube Music continues through its other search and album candidates, then standard YouTube. When no candidate qualifies, the download fails rather than silently taking a shorter radio edit. Duration and title/artist checks reduce wrong-version matches; they cannot certify the audio of identically labelled, equal-length recordings.
+
+For Spotify/Deezer requests with a known duration, downloaded audio is measured in an isolated staging directory before publication. Unreadable audio or a duration difference over 10 seconds produces an error and leaves an existing library file untouched. Local-provider files are checked before copying/tagging too. Explicit video choices and **Replace audio** remain deliberate manual choices. Historical files are not automatically replaced or repaired.
 
 The default audio provider is **YouTube Music**. Downtify uses [`ytmusicapi`](https://ytmusicapi.readthedocs.io/) to search for the best match by comparing track duration. When YouTube Music has no acceptable match, or only one whose duration is far off (a likely different recording), Downtify automatically falls back to searching standard YouTube — see [How it works](../how-it-works.md#fallback-to-standard-youtube).
 

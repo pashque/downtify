@@ -7,7 +7,7 @@ import os
 import re
 import zlib
 from threading import Lock
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 from urllib.parse import quote, unquote
 
 import yt_dlp
@@ -211,6 +211,12 @@ def _result_to_song(result: dict[str, Any]) -> Optional[dict[str, Any]]:
         'release_date': release_date,
         'source': 'youtube',
     }
+    artist_ids = [
+        str(a.get('id') or '')
+        for a in (result.get('artists') or [])
+        if isinstance(a, dict) and a.get('name')
+    ]
+    row['artist_ids'] = artist_ids + [''] * (len(artists) - len(artist_ids))
     row['spotify_url'] = spotify_open_url(row)
     return row
 
@@ -1215,7 +1221,7 @@ _STRONG_MATCH_MAX_DURATION_DIFF = 10
 # Standard-YouTube hits are mostly music videos and user uploads; beyond
 # this gap it's a long intro/outro cut, a loop or a compilation, never the
 # song itself.
-_YOUTUBE_MAX_DURATION_DIFF = 30
+_YOUTUBE_MAX_DURATION_DIFF = 10
 _YOUTUBE_SEARCH_LIMIT = 10
 
 
@@ -1245,6 +1251,8 @@ def find_match(
     ):
         return video_id, match
 
+    if video_id and ytm_diff is not None and ytm_diff > _STRONG_MATCH_MAX_DURATION_DIFF:
+        video_id, match = None, None
     yt_video_id, yt_diff = _find_match_via_youtube(song)
     if not yt_video_id:
         return video_id, match
@@ -1284,6 +1292,30 @@ def _duration_diff(
     return abs(int(candidate) - int(target))
 
 
+def _matching_artists(song: dict[str, Any]) -> list[Any]:
+    """Keep YouTube artist IDs with credits, without mixing namespaces."""
+    artists = song.get('artists') or []
+    ids = song.get('youtube_artist_ids') or (
+        song.get('artist_ids') if song.get('source') in {'youtube', 'youtube_music'} else []
+    ) or []
+    credits = []
+    for i, artist in enumerate(artists):
+        credit = dict(artist) if isinstance(artist, dict) else {'name': artist}
+        # Structured input may belong to Spotify/Deezer. Only compare IDs
+        # known to be YouTube IDs; unspecified source retains the legacy
+        # YouTube-shaped structured-credit contract.
+        if song.get('source') not in {None, '', 'youtube', 'youtube_music'}:
+            credit.pop('id', None)
+        if i < len(ids) and ids[i]:
+            credit['id'] = ids[i]
+        credits.append(credit)
+    return credits
+
+
+def _artist_query(artists: list[Any]) -> str:
+    return ' '.join(str(a.get('name') or '') if isinstance(a, dict) else str(a or '') for a in artists).strip()
+
+
 def _find_youtube_music_match(
     song: dict[str, Any],
 ) -> tuple[Optional[str], Optional[dict[str, Any]]]:
@@ -1294,8 +1326,10 @@ def _find_youtube_music_match(
     if no acceptable match is found.
     """
 
-    artists = song.get('artists') or []
-    artists_q = ' '.join(artists)
+    artists = _matching_artists(song)
+    artists_q = _artist_query(artists)
+    if not artists_q:
+        return None, None
     title = song.get('name', '')
     album = song.get('album_name', '')
     query = f'{artists_q} {title}'.strip()
@@ -1443,23 +1477,8 @@ def _search_youtube_music_match(
         )
         _log_ytm_response('find_match chosen row', best)
         return best.get('videoId'), best
-    for result in results:
-        # Same hard title/artist requirements as `_pick_best`: never fall
-        # back to "the first result" if its title doesn't actually
-        # resemble the source track, or if it shares the title but not
-        # the artist (title collisions across unrelated artists happen).
-        if (
-            result.get('videoId')
-            and (not title or _titles_match(title, result.get('title')))
-            and _artists_overlap(artists, result)
-        ):
-            logger.info(
-                'YouTube Music find_match fallback first videoId={} title={!r}',
-                result.get('videoId'),
-                result.get('title'),
-            )
-            _log_ytm_response('find_match fallback row', result)
-            return result['videoId'], result
+    # Every result already passed through all hard gates in _pick_best.
+    # A second "first result" path would revive rejected audio variants.
     return None, None
 
 
@@ -1538,14 +1557,13 @@ def _youtube_entry_to_result(
     # The artist isn't always the first segment: fan/OST uploads read
     # "Game OST - Title - Artist", so every segment is a possible credit.
     segments = _TITLE_NOISE_RE.sub('', raw_title).split(' - ')
-    if len(segments) > 1:
-        credited = [*credited, *(s.strip() for s in segments if s.strip())]
-    artists: list[str] = []
-    for credit in credited:
-        artists.extend([
-            credit,
-            *(p for p in _ARTIST_CREDIT_SPLIT_RE.split(credit) if p),
-        ])
+    if len(segments) > 2:
+        # In "OST - Title - Artist", only the trailing segments can add
+        # credits. The song-title segment itself is never artist evidence.
+        credited = [*credited, *(s.strip() for s in segments[2:] if s.strip())]
+    # Preserve whole credits; the matcher handles anchored feature display.
+    # Tokenizing '&'/'+' would invent A and B as members of the act A&B.
+    artists = list(credited)
     channel = _YOUTUBE_CHANNEL_SUFFIX_RE.sub(
         '', str(entry.get('channel') or entry.get('uploader') or '')
     ).strip()
@@ -1580,9 +1598,12 @@ def _find_match_via_youtube(
     when nothing qualifies or the search fails.
     """
 
-    artists = song.get('artists') or []
+    artists = _matching_artists(song)
     title = song.get('name', '')
-    query = f'{" ".join(artists)} {title}'.strip()
+    artists_q = _artist_query(artists)
+    if not artists_q:
+        return None, None
+    query = f'{artists_q} {title}'.strip()
     if not query:
         return None, None
     try:
@@ -1773,6 +1794,8 @@ def _normalized_names_match(t: str, c: str) -> bool:
     if len(shorter) < 4 or not longer.startswith(shorter):
         return False
     tail = longer[len(shorter) :]
+    if tail and not (tail[0].isspace() or tail.startswith(('(', '['))):
+        return False
     return not _VERSION_QUALIFIER_RE.search(tail)
 
 
@@ -2171,6 +2194,8 @@ def _prefer_official_audio_track(
     """
     if video_type != _MUSIC_VIDEO_TYPE_MUSIC_VIDEO:
         return video_id, duration
+    if not artists or not _artist_query(artists[:1]):
+        return video_id, duration
     with _lock:
         cached = _omv_preference_cache.get(video_id)
     if cached is not None:
@@ -2190,9 +2215,7 @@ def _prefer_official_audio_track(
             continue
         if result.get('videoType') != _MUSIC_VIDEO_TYPE_OFFICIAL_AUDIO:
             continue
-        if not _titles_match(title, result.get('title')):
-            continue
-        if not _artists_overlap(artists, result):
+        if _pick_best([result], duration, title, artists) is None:
             continue
         candidate = result.get('videoId')
         if not (isinstance(candidate, str) and candidate.strip()):
@@ -2339,22 +2362,24 @@ def _find_match_via_album(
     if not browse_id:
         return None, None
 
+    artists = _matching_artists(song)
+    if not artists or not _artist_query(artists[:1]):
+        return None, None
     tracks, _total = _cached_album_tracks_and_count(browse_id)
-    for track in tracks:
-        if not isinstance(track, dict):
-            continue
-        video_id = _row_video_id(track)
-        if not video_id:
-            continue
-        if _titles_match(title, track.get('title')):
+    # Use the same hard gates as search, including negative audio variants.
+    # Album membership cannot revive a rejected nightcore/karaoke/etc. row.
+    best = _pick_best(tracks, song.get('duration') or 0, title, artists, album_name)
+    if best is not None:
+        video_id = _row_video_id(best)
+        if video_id:
             logger.info(
                 'YouTube Music find_match album-tracklist fallback hit '
                 'browseId={!r} videoId={} title={!r}',
                 browse_id,
                 video_id,
-                track.get('title'),
+                best.get('title'),
             )
-            return video_id, track
+            return video_id, best
     logger.info(
         'YouTube Music find_match album-tracklist fallback: no title '
         'match in browseId={!r} for title={!r}',
@@ -2535,7 +2560,7 @@ def enrich_from_match(
 
 
 def _artists_overlap(
-    target_artists: Optional[list[str]], result: dict[str, Any]
+    target_artists: Optional[Sequence[str | dict[str, Any]]], result: dict[str, Any]
 ) -> bool:
     """True when the candidate shares at least one artist with the target.
 
@@ -2548,33 +2573,43 @@ def _artists_overlap(
     picked just for being the "least wrong" duration match.
     """
 
-    target_set = {_norm_artist_name(a) for a in (target_artists or []) if a}
-    target_set.discard('')
-    if not target_set:
-        return True
-    candidate_set: set[str] = set()
-    for a in result.get('artists') or []:
-        if not isinstance(a, dict):
-            continue
-        name = a.get('name') or ''
-        # YouTube Music sometimes packs every credit into one entry
-        # ("JIRAYAUAI, DOUTH!, VITOR BUENO, and SAM SAM"); the unsplit
-        # name is kept too so "Rionegro & Solimões" still matches whole.
-        candidate_set.add(_norm_artist_name(name))
-        candidate_set.update(
-            _norm_artist_name(p)
-            for p in _ARTIST_CREDIT_SPLIT_RE.split(name)
-            if p
-        )
-    return bool(target_set & candidate_set)
+    if not target_artists:
+        return True  # Legacy metadata-only callers with no artist context.
+    primary = target_artists[0]
+    name = primary.get('name', '') if isinstance(primary, dict) else primary
+    wanted = _norm_artist_name(name)
+    wanted_id = str(primary.get('id') or '') if isinstance(primary, dict) else ''
+    if not wanted and not wanted_id:
+        return False
+    candidates = [a for a in (result.get('artists') or []) if isinstance(a, dict)]
+    # These IDs share the YouTube namespace, never Spotify vs YouTube.
+    candidate_ids = {str(a['id']) for a in candidates if a.get('id')}
+    if wanted_id and candidate_ids:
+        return wanted_id in candidate_ids
+    for credit in candidates:
+        candidate = _norm_artist_name(credit.get('name') or '')
+        if wanted and candidate == wanted:
+            return True
+        # Anchored feature/packed display credit only. Bare punctuation
+        # belongs to names: A&B, A/B and +++ are not bags of words.
+        if wanted and candidate.startswith(wanted):
+            tail = candidate[len(wanted):]
+            if re.match(r'^(?:\s+(?:feat\.?|ft\.?|featuring)\s+|,\s+and\s+)', tail):
+                return True
+            if len(target_artists) > 1 and tail.startswith(', '):
+                second = target_artists[1]
+                second_name = second.get('name', '') if isinstance(second, dict) else second
+                second_key = _norm_artist_name(second_name)
+                packed_tail = tail[2:]
+                if second_key and (packed_tail == second_key or packed_tail.startswith(second_key + ', ')):
+                    return True
+    return False
 
 
 def _norm_artist_name(name: str) -> str:
-    """Casefolded artist name without a leading "The" — Spotify and
-    YouTube Music disagree on it ("Eden Project" vs "The Eden Project")."""
-
-    value = re.sub(r'\s+', ' ', name.casefold()).strip()
-    return re.sub(r'^the\s+', '', value)
+    """Exact normalized credit: names with and without The are not IDs."""
+    from .library_catalog import artist_identity_key
+    return artist_identity_key(name)
 
 
 _NEGATIVE_KEYWORDS = (
@@ -2640,6 +2675,12 @@ def _pick_best(
         candidate_duration = result.get('duration_seconds') or _parse_duration(
             result.get('duration')
         )
+        # A known source duration is an identity constraint, not merely a
+        # ranking hint. Unknown-length candidates cannot be safely vetted.
+        if target_duration and not candidate_duration:
+            continue
+        if target_duration and abs(int(candidate_duration) - int(target_duration)) > _STRONG_MATCH_MAX_DURATION_DIFF:
+            continue
         if target_duration and candidate_duration:
             score = abs(candidate_duration - target_duration)
         else:
@@ -2794,7 +2835,7 @@ def _split_upload_title(
         return clean, artists
     if _TITLE_VERSION_SUFFIX_RE.match(tail.strip()):
         return clean, artists
-    credited = [a.strip() for a in head.split(',') if a.strip()]
+    credited = [head.strip()]
     return tail.strip(), credited
 
 
@@ -2849,6 +2890,16 @@ def _playlist_track_song(track: dict[str, Any]) -> Optional[dict[str, Any]]:
         title, artists = _split_upload_title(track.get('title', ''), artists)
         song['name'] = title
         song['artists'] = _extract_title_featuring_artist(title, artists)
+        # Inferred upload credits are not the uploader's catalog identity.
+        # Keep an ID only when its exact original name remains a credit.
+        original_ids = {
+            a.get('name'): str(a.get('id') or '')
+            for a in track.get('artists') or [] if isinstance(a, dict)
+        }
+        song['artist_ids'] = [original_ids.get(a, '') for a in song['artists']]
+        song['artists_structured'] = song['artists'] == [
+            a.get('name') for a in track.get('artists') or [] if isinstance(a, dict)
+        ]
     # Pin the download to the playlist's own video: for a song that isn't
     # on Spotify, the upload in the playlist may be the only copy there is.
     song['youtube_id'] = video_id

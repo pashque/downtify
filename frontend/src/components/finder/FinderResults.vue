@@ -53,6 +53,7 @@
             v-for="(song, i) in visibleSongs"
             :key="song.song_id || song.url"
             :song="song"
+            :location="locationFor(song)"
             :index="i"
             :queue="songQueue"
             :songs="visibleSongs"
@@ -125,6 +126,7 @@ import TrackDownPlay from '../library/TrackDownPlay.vue'
 import ReleaseCard from '../search/ReleaseCard.vue'
 import { artistSongsKey, useFinder } from '/src/model/finder'
 import { useLibrary } from '/src/model/library'
+import { useLibraryLocations } from '/src/model/libraryLocations'
 import { knownArtistPhoto } from '/src/lib/artistPhotoProxy'
 import { deezerImage } from '/src/lib/deezerImage'
 import { browseLocation } from '/src/lib/finder'
@@ -137,11 +139,12 @@ const props = defineProps({
 })
 
 const GRID =
-  'grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6'
+  'tile-grid'
 
 const { t } = useI18n()
 const finder = useFinder()
 const library = useLibrary()
+const { locationFor } = useLibraryLocations(computed(() => finder.songs.value))
 const filter = ref('all')
 
 // What is asked for, as model/finder.js keys it.

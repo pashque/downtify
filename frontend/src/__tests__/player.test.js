@@ -232,7 +232,29 @@ describe('usePlayer queue', () => {
     player.playAt(1)
     player.setShuffle(true)
     expect(player.currentTrack.value.title).toBe('Two')
-    expect(upcoming().sort()).toEqual(['One', 'Three'])
+    expect(player.played.value.map((u) => u.track.title)).toEqual(['One'])
+    expect(upcoming()).toEqual(['Three'])
+  })
+
+  it('shuffle picks tracks randomly but never reorders the visible queue', () => {
+    const titles = Array.from({ length: 12 }, (_, i) => `T${i}`)
+    player.setPlaylist(titles.map((title) => ({ file: `${title}.mp3`, title })), { startIndex: 0 })
+    player.setShuffle(true)
+    const visible = () => [
+      ...player.played.value.map((u) => u.track.title),
+      player.currentTrack.value.title,
+      ...upcoming(),
+    ]
+    expect(visible()).toEqual(titles)
+    const picked = []
+    for (let i = 0; i < 6; i++) {
+      player.next()
+      picked.push(player.currentIndex.value)
+      expect(visible()).toEqual(titles)
+    }
+    // Random picks, not simply the following rows.
+    expect(picked).not.toEqual([1, 2, 3, 4, 5, 6])
+    expect(new Set(picked).size).toBe(picked.length)
   })
 
   it('can stop after the current track', () => {

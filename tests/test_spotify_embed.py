@@ -90,12 +90,12 @@ def test_embed_row_track_flat_row_returns_same_dict():
 @pytest.mark.parametrize(
     ('subtitle', 'expected'),
     [
-        (f'{_AL1}, {_AL2}', [_AL1, _AL2]),
-        (_SUB_TWO_NBSP, [_AL1, _AL2]),
-        (_SUB_FULLWIDTH, [_AL3, _AL4]),
+        (f'{_AL1}, {_AL2}', [f'{_AL1}, {_AL2}']),
+        (_SUB_TWO_NBSP, [f'{_AL1}, {_AL2}']),
+        (_SUB_FULLWIDTH, [_SUB_FULLWIDTH]),
     ],
 )
-def test_artists_from_subtitle_splits(subtitle, expected):
+def test_artists_from_subtitle_preserves_ambiguous_display(subtitle, expected):
     got = [d['name'] for d in _artists_from_subtitle(subtitle)]
     assert got == expected
 
@@ -122,7 +122,7 @@ def test_artist_names_falls_back_to_subtitle():
         'title': 'T',
         'subtitle': f'{_AL3}, {_AL4}',
     }
-    assert _artist_names(entity) == [_AL3, _AL4]
+    assert _artist_names(entity) == [f'{_AL3}, {_AL4}']
 
 
 def test_track_dict_parses_iso_release_date():
@@ -209,6 +209,7 @@ def test_enrich_track_from_spotify_if_sparse_skips_when_complete(
         'release_date': '2020-01-01',
         'track_number': 1,
         'album_name': 'TestAlbum',
+        'album_artist': 'Album Artist',
     }
     assert enrich_track_from_spotify_if_sparse(complete) is complete
     mock_track_from_id.assert_not_called()
@@ -502,7 +503,7 @@ def test_track_dict_uses_subtitle_when_artists_empty():
         'subtitle': f'{_AL1}, {_AL2}',
     })
     td = _track_dict(track, track_id='tid', fallback_album='TestAlbum')
-    assert td['artists'] == [_AL1, _AL2]
+    assert td['artists'] == [f'{_AL1}, {_AL2}']
     assert td['artist'] == f'{_AL1}, {_AL2}'
     assert td['album_name'] == 'TestAlbum'
     assert td['name'] == 'TestSong'
@@ -541,7 +542,7 @@ def test_album_tracks_from_id_merges_row_subtitle():
 
     assert len(songs) == 1
     assert songs[0]['song_id'] == 't1'
-    assert songs[0]['artists'] == [_AL1, _AL2]
+    assert songs[0]['artists'] == [f'{_AL1}, {_AL2}']
     assert songs[0]['artist'] == f'{_AL1}, {_AL2}'
     assert songs[0]['album_name'] == 'TestAlbum'
     assert songs[0]['track_number'] == 1
@@ -1484,6 +1485,9 @@ def test_search_results_sorts_artists_albums_and_playlists():
                 'id': 'b1',
                 'name': 'Record',
                 'artists': [_AL1],
+                'artist_ids': [''],
+                'artists_structured': True,
+                'album_id': 'b1',
                 'year': '1994',
                 'cover_url': 'https://img/b',
                 'type': 'ALBUM',

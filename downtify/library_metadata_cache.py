@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import stat
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +14,7 @@ from .library_cache_keys import (
     file_content_key,
     file_content_key_from_name_and_size,
 )
-from .library_metadata import library_entry_for_file
+from .library_metadata import _split_artists, library_entry_for_file
 from .library_paths import locate_library_file
 from .sqlite_utils import connect_sqlite
 
@@ -24,10 +25,14 @@ _TAG_READ_THREADS = 8
 #: 4: the audio format (codec, bitrate, sample rate, channels).
 #: 5: genre (from tags, or iTunes when Sync cannot write the file).
 #: 6: the explicit mark.
-META_VERSION = 6
+#: 7: exact artist credits and conservative album-credit reconciliation.
+#: 8: authoritative embedded release type (also invalidates persisted listings).
+META_VERSION = 8
 
 #: Columns added after the table was first created, with their SQL type.
 _ADDED_COLUMNS = {
+    'artists': "TEXT NOT NULL DEFAULT '[]'",
+    'release_type': "TEXT NOT NULL DEFAULT ''",
     'has_cover': 'INTEGER NOT NULL DEFAULT 0',
     'cover_px': 'INTEGER NOT NULL DEFAULT 0',
     'album_artist': "TEXT NOT NULL DEFAULT ''",
@@ -47,7 +52,7 @@ _ROW_COLUMNS = (
     'content_key, filename, file_mtime_ns, file_size, title, artist, '
     'album, has_cover, cover_px, album_artist, track_number, year, '
     'duration, meta_version, codec, bitrate, sample_rate, channels, '
-    'genre, explicit'
+    'genre, explicit, artists, release_type'
 )
 
 
@@ -80,7 +85,9 @@ def _row_entry(
         'file': stored,
         'title': str(row['title'] or ''),
         'artist': str(row['artist'] or ''),
+        'artists': json.loads(row['artists']),
         'album': str(row['album'] or ''),
+        'release_type': str(row['release_type'] or ''),
         'album_artist': str(row['album_artist'] or ''),
         'track_number': int(row['track_number'] or 0),
         'year': str(row['year'] or ''),
@@ -122,7 +129,9 @@ class LibraryMetadataCache:
                         filename TEXT NOT NULL,
                         title TEXT NOT NULL DEFAULT '',
                         artist TEXT NOT NULL DEFAULT '',
+                        artists TEXT NOT NULL DEFAULT '[]',
                         album TEXT NOT NULL DEFAULT '',
+                        release_type TEXT NOT NULL DEFAULT '',
                         has_cover INTEGER NOT NULL DEFAULT 0,
                         cover_px INTEGER NOT NULL DEFAULT 0,
                         album_artist TEXT NOT NULL DEFAULT '',
@@ -496,14 +505,16 @@ class LibraryMetadataCache:
                (content_key, filename, title, artist, album, has_cover,
                 cover_px, album_artist, track_number, year, duration,
                 meta_version, codec, bitrate, sample_rate, channels, genre,
-                explicit, file_mtime_ns, file_size, cached_at)
+                explicit, file_mtime_ns, file_size, cached_at, artists, release_type)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?)
+                       ?, ?, ?, ?, ?)
                ON CONFLICT(content_key) DO UPDATE SET
                filename=excluded.filename,
                title=excluded.title,
                artist=excluded.artist,
+               artists=excluded.artists,
                album=excluded.album,
+               release_type=excluded.release_type,
                has_cover=excluded.has_cover,
                cover_px=excluded.cover_px,
                album_artist=excluded.album_artist,
@@ -542,6 +553,9 @@ class LibraryMetadataCache:
                 mtime_ns,
                 file_size,
                 _now_iso(),
+                # JSON preserves names containing the legacy semicolon too.
+                json.dumps(entry.get('artists') or _split_artists(str(entry.get('artist') or ''))),
+                str(entry.get('release_type') or ''),
             ),
         )
 

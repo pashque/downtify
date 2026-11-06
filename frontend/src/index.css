@@ -17,6 +17,18 @@
     transform: translateY(6px);
     transition: all 220ms var(--ease-out-soft);
   }
+  .tile .tile-badge {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms var(--ease-out-soft);
+  }
+  .tile:hover .tile-badge,
+  .tile:focus-within .tile-badge {
+    opacity: 1;
+  }
+  .tile-action-glow:not(:disabled) {
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--c-accent) 40%, transparent);
+  }
   .tile:hover .tile-play,
   .tile:focus-within .tile-play {
     opacity: 1;
@@ -48,10 +60,18 @@
   overflow: hidden;
 }
 @media (min-width: 1024px) {
+  /* The seek rail starts after the 48px timestamp + 12px gap. */
+  .np-edge-aligned { margin-inline: 60px; }
   .now-playing-stage,
   .now-playing-cover {
     /* Explicit px, not 100%, so the auto grid column can size to the cover. */
     width: min(460px, 38vw, calc(100dvh - 22rem));
+  }
+}
+@media (min-width: 1024px) {
+  /* Same box as the cover, so side panels begin at the cover's top edge. */
+  .now-playing-aligned {
+    height: min(460px, 38vw, calc(100dvh - 22rem));
   }
 }
 .now-playing-title {
@@ -77,4 +97,61 @@
 .list-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* One card grid for every page (Library, Home, Search, Discover, Charts,
+   Artist, Album, Link): same columns and gaps as the Library's VirtualGrid
+   (lib/virtualGrid.js columnsFor/columnGap/ROW_GAP). */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 28px;
+}
+@media (min-width: 400px) { .tile-grid { column-gap: 20px; } }
+@media (min-width: 640px) { .tile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .tile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .tile-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .tile-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (min-width: 1900px) { .tile-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+
+/* Phones: the hero's secondary buttons (Add to queue, Download album,
+   Open on Spotify, Share...) keep their icon and drop the label, so the
+   actions fit one row instead of wrapping into three. The label stays for
+   screen readers; the green primary keeps its text. */
+@media (max-width: 1023px) {
+  .hero-actions { gap: 8px; }
+  .hero-actions [data-has-icon]:not([data-variant='primary']) {
+    width: 40px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .hero-actions [data-has-icon]:not([data-variant='primary']) .ui-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .hero-actions { flex-wrap: nowrap; }
+  .hero-actions > [data-edition-menu] { flex: 1 1 0; min-width: 64px; max-width: 160px; }
+  .hero-actions [data-edition-menu] > span { width: 100%; min-width: 0; }
+  .hero-actions [data-edition-menu] button { padding-left: 10px; padding-right: 10px; gap: 6px; }
+  .hero-actions [data-edition-menu] button > svg:first-of-type { display: none; }
+  .hero-actions > * { flex-shrink: 0; }
+  /* The version picker takes what is left of the row and truncates. */
+  .hero-actions label:has(select) { flex: 1 1 0; min-width: 64px; max-width: 160px; }
+  /* Room for the version text: no leading icon, a slightly smaller play. */
+  .hero-actions label:has(select) > svg:first-of-type { display: none; }
+  .hero-actions label:has(select) select { padding-left: 10px; padding-right: 26px; }
+  .hero-actions > button.size-14 { width: 48px; height: 48px; }
+  /* A long green label ("Download missing tracks") shortens instead of
+     pushing the row off screen. */
+  .hero-actions [data-variant='primary'] { flex-shrink: 1; min-width: 0; padding-left: 14px; padding-right: 14px; }
+  .hero-actions [data-variant='primary'] .ui-btn-label { overflow: hidden; text-overflow: ellipsis; }
+}
+/* Small phones keep every action reachable rather than clipping the menu. */
+@media (max-width: 359px) {
+  .hero-actions { flex-wrap: wrap; }
 }

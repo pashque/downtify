@@ -41,7 +41,7 @@ import httpx
 from loguru import logger
 
 from . import providers
-from .file_naming import file_name_key, title_key
+from .resource_identity import exact_name_key
 
 _SEARCH_URL = 'https://api.deezer.com/search/artist'
 _RELATED_URL = 'https://api.deezer.com/artist/{artist_id}/related'
@@ -213,14 +213,14 @@ def _most_popular_exact_match(
     first exact match would attach the wrong artist's id or face.
     """
 
-    wanted = file_name_key(name)
+    wanted = exact_name_key(name)
     if not wanted:
         return None
     matches = [
         row
         for row in rows
         if isinstance(row, dict)
-        and file_name_key(str(row.get('name') or '')) == wanted
+        and exact_name_key(str(row.get('name') or '')) == wanted
     ]
     if not matches:
         return None
@@ -313,7 +313,7 @@ def lookup_artist_id(name: str) -> Optional[str]:
     """
 
     text = name.strip()
-    if not file_name_key(text):
+    if not exact_name_key(text):
         return None
     match = _most_popular_exact_match(_search_rows(text, 25), text)
     if match is None:
@@ -350,7 +350,7 @@ def exact_artist_picture(name: str) -> Optional[str]:
     """
 
     text = name.strip()
-    if not file_name_key(text):
+    if not exact_name_key(text):
         return None
     match = _most_popular_exact_match(_search_rows(text, 25), text)
     if match is None or not _has_real_picture(match):
@@ -449,8 +449,8 @@ def find_track_preview(
     :func:`_search_rows`), so ``""`` always means "no clip found".
     """
 
-    wanted_artist = file_name_key(artist)
-    wanted_title = title_key(title)
+    wanted_artist = exact_name_key(artist)
+    wanted_title = exact_name_key(title)
     if not wanted_artist or not wanted_title:
         return ''
     try:
@@ -476,13 +476,9 @@ def find_track_preview(
             continue
         preview = _preview_link(row.get('preview'))
         row_artist = str((row.get('artist') or {}).get('name') or '')
-        if not preview or file_name_key(row_artist) != wanted_artist:
+        if not preview or exact_name_key(row_artist) != wanted_artist:
             continue
-        titles = {
-            title_key(row.get('title')),
-            title_key(row.get('title_short')),
-        }
-        if wanted_title not in titles:
+        if wanted_title != exact_name_key(row.get('title') or row.get('title_short')):
             continue
         matches.append((row, preview))
     if not matches:
@@ -970,6 +966,10 @@ def _album_songs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
     rows = _paginate_tracks(payload.get('tracks') or {})
     release_date = str(payload.get('release_date') or '').strip()
+    artist = payload.get('artist') if isinstance(payload.get('artist'), dict) else {}
+    album_artist = str(artist.get('name') or '').strip()
+    album_name = str(payload.get('title') or '').strip()
+    cover = _cover_from_images(payload)
     total = len(rows)
     songs: list[dict[str, Any]] = []
     for index, row in enumerate(rows):
@@ -982,6 +982,12 @@ def _album_songs(payload: dict[str, Any]) -> list[dict[str, Any]]:
             release_date=release_date,
         )
         if song:
+            # Only the album resource's credit is authoritative here;
+            # a track's lead/contributors may instead start with a guest.
+            if album_artist:
+                song['album_artist'] = album_artist
+            song['album_name'] = song['album_name'] or album_name
+            song['cover_url'] = song['cover_url'] or cover
             songs.append(song)
     return songs
 
@@ -1574,7 +1580,7 @@ def editorial_playlist(name: str) -> Optional[dict[str, Any]]:
     Deezer can't be asked or refuses, so a failure isn't taken for "none".
     """
 
-    wanted = file_name_key(name)
+    wanted = exact_name_key(name)
     if not wanted:
         return None
     _throttle()
@@ -1595,7 +1601,7 @@ def editorial_playlist(name: str) -> Optional[dict[str, Any]]:
         title = str(row.get('title') or '').strip()
         if not title.startswith(_EDITORIAL_PREFIX):
             continue
-        if file_name_key(title[len(_EDITORIAL_PREFIX) :]) != wanted:
+        if exact_name_key(title[len(_EDITORIAL_PREFIX) :]) != wanted:
             continue
         playlist_id = row.get('id')
         if not playlist_id:
@@ -1626,7 +1632,7 @@ def search_albums_by(artist: str, title: str) -> list[dict[str, Any]]:
     when Deezer can't be asked or refuses.
     """
 
-    wanted = file_name_key(artist)
+    wanted = exact_name_key(artist)
     queries = [f'artist:"{artist}" album:"{title}"', f'{artist} {title}']
     found: list[dict[str, Any]] = []
     for query in queries:
@@ -1638,6 +1644,6 @@ def search_albums_by(artist: str, title: str) -> list[dict[str, Any]]:
             or []
         )
         found = _map_rows(rows, _finder_album_row)
-        if any(file_name_key(row['artist']) == wanted for row in found):
+        if any(exact_name_key(row['artist']) == wanted for row in found):
             break
     return found

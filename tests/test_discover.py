@@ -117,9 +117,9 @@ def _recommend(store, library, deezer, **kw):
 
 
 def test_artist_key_matches_names_as_the_disk_keeps_them():
-    assert artist_key('AC/DC') == artist_key('acdc')
+    assert artist_key('AC/DC') != artist_key('acdc')
     assert artist_key('  Daft   Punk ') == artist_key('daft punk')
-    assert not artist_key('???')
+    assert artist_key('???') == '???'
 
 
 def test_listening_outweighs_liking_which_outweighs_owning():
@@ -280,12 +280,14 @@ def test_block_list_round_trip(tmp_path):
     store = _store(tmp_path)
 
     assert store.block('AC/DC')['name'] == 'AC/DC'
-    store.block('ACDC')  # the same artist: a no-op
-    assert [row['name'] for row in store.blocked()] == ['AC/DC']
-    assert store.blocked_keys() == {artist_key('acdc')}
+    store.block('ACDC')  # punctuation is identity: separate artists
+    assert {row['name'] for row in store.blocked()} == {'AC/DC', 'ACDC'}
+    assert store.blocked_keys() == {artist_key('acdc'), artist_key('ac/dc')}
 
     assert store.unblock('acdc') is True
     assert store.unblock('acdc') is False
+    assert [row['name'] for row in store.blocked()] == ['AC/DC']
+    assert store.unblock('ac/dc') is True
     assert store.blocked() == []
     assert store.block('') is None
 
@@ -552,7 +554,7 @@ def test_title_key_ignores_edition_suffixes(title, key):
 
 
 def test_album_key_matches_across_services():
-    assert album_key('Portishead', 'Dummy (Deluxe)') == album_key(
+    assert album_key('Portishead', 'Dummy (Deluxe)') != album_key(
         'portishead', 'Dummy'
     )
 
@@ -690,7 +692,7 @@ def test_pick_collections_end_to_end():
         (a['name'], a['reason'], a['because']) for a in picked['albums']
     ] == [('Debut', 'similar', ['Seed'])]
     assert picked['albums'][0]['url'] == 'https://open.spotify.com/album/n2'
-    assert [a['name'] for a in picked['more_albums']] == ['Second', 'Third']
+    assert [a['name'] for a in picked['more_albums']] == ['Owned (Deluxe)', 'Second']
     assert [(p['spotify_id'], p['reason']) for p in picked['playlists']] == [
         ('p-radio', 'radio'),
         ('p-new', 'this_is'),

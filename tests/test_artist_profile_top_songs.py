@@ -76,9 +76,11 @@ def no_thread_leaks(monkeypatch):
 
 
 def test_path_is_a_sidecar_next_to_the_other_artist_files(tmp_path):
-    assert artist_profile.profile_top_songs_path_for(
-        tmp_path, 'Linkin/Park'
-    ) == (tmp_path / '.metadata/ArtistTopSongs/LinkinPark.topsongs.json')
+    path = artist_profile.profile_top_songs_path_for(tmp_path, 'Linkin/Park')
+    assert path.parent == tmp_path / '.metadata/ArtistTopSongs'
+    assert path.name.endswith('.topsongs.json')
+    assert path != artist_profile.profile_top_songs_path_for(tmp_path, 'LinkinPark')
+    assert path == artist_profile.profile_top_songs_path_for(tmp_path, 'linkin/park')
 
 
 def test_load_of_a_missing_or_broken_file_is_none(tmp_path):
@@ -331,7 +333,7 @@ def test_the_write_is_atomic_and_leaves_no_temp_files(tmp_path):
             tmp_path, 'Linkin Park', ARTIST_ID
         )
     folder = tmp_path / '.metadata/ArtistTopSongs'
-    assert [p.name for p in folder.iterdir()] == ['Linkin Park.topsongs.json']
+    assert list(folder.iterdir()) == [artist_profile.profile_top_songs_path_for(tmp_path, 'Linkin Park')]
 
 
 def test_a_failed_write_keeps_the_previous_file_and_cleans_up(
@@ -359,7 +361,7 @@ def test_a_failed_write_keeps_the_previous_file_and_cleans_up(
         tmp_path, 'Linkin Park'
     ).read_bytes() == (before)
     folder = tmp_path / '.metadata/ArtistTopSongs'
-    assert [p.name for p in folder.iterdir()] == ['Linkin Park.topsongs.json']
+    assert list(folder.iterdir()) == [artist_profile.profile_top_songs_path_for(tmp_path, 'Linkin Park')]
 
 
 def test_two_simultaneous_requests_fetch_once(tmp_path):

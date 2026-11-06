@@ -19,6 +19,12 @@ _TRACK_KEYS = (
     'song_id',
     'name',
     'artists',
+    'artist_ids',
+    'artists_structured',
+    'artist_entities',
+    'album_id',
+    'spotify_album_id',
+    'source',
     'artist',
     'album_name',
     'cover_url',
@@ -38,7 +44,7 @@ def _compact_track(song: dict[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {}
     for key in _TRACK_KEYS:
         value = song.get(key)
-        if value is None or value is False:
+        if value is None or (value is False and key != 'artists_structured'):
             continue
         if isinstance(value, str) and not value:
             continue

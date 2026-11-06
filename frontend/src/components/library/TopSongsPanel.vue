@@ -76,7 +76,7 @@
             {{ row.song.name }}
           </p>
           <p class="truncate text-[13px] text-muted">
-            {{ (row.song.artists || []).join(', ') || row.song.artist }}
+            <ArtistCredits :artists="row.song.artists" :artist="row.song.artist" />
           </p>
         </div>
         <span class="hidden w-[28%] truncate text-[13px] text-muted lg:block">{{
@@ -114,6 +114,7 @@
 </template>
 
 <script setup>
+import ArtistCredits from '/src/components/library/ArtistCredits.vue'
 // An artist's top songs as a selectable, downloadable list - one component
 // for the pasted-link page (TopSongsView) and the artist page's Top songs
 // tab. `state` is what `useTopSongs` returns; it owns every bit of state

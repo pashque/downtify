@@ -10,6 +10,7 @@
     :aria-valuetext="valueText"
     class="group relative cursor-pointer touch-none outline-none"
     :style="{ height: `${HEIGHT}px` }"
+    :data-wave-compact="compact || undefined"
     @pointerdown="onDown"
     @keydown="onKey"
   >
@@ -20,10 +21,12 @@
     />
     <span
       ref="thumb"
-      class="absolute size-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_2px_8px_rgb(0_0_0/0.35)] transition-transform duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-black/40"
+      class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_2px_8px_rgb(0_0_0/0.35)] transition-transform duration-150 group-focus-visible:ring-2 group-focus-visible:ring-white group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-black/40"
       :class="dragging ? 'scale-110' : 'group-hover:scale-110'"
       :style="{
         top: `${BAR_Y}px`,
+        width: `${THUMB}px`,
+        height: `${THUMB}px`,
         backgroundColor: palette?.soft || '#ffffff',
       }"
     />
@@ -47,16 +50,21 @@ const props = defineProps({
   playing: { type: Boolean, default: false },
   // { primary, secondary, soft } from useCoverPalette, or null.
   palette: { type: Object, default: null },
+  // Mini player: a slimmer bar with lower waves, same motion.
+  compact: { type: Boolean, default: false },
+  // Unplayed part of the bar (the full player sits on a dark backdrop).
+  trackColor: { type: String, default: 'rgb(255 255 255 / 0.2)' },
 })
 const emit = defineEmits(['update:modelValue', 'commit'])
 
 const { track, dragging, onDown, onKey } = useSlider(props, emit)
 
 // Waves rise above a thick bar that sits near the bottom of the box.
-const HEIGHT = 48
-const BAR_Y = 35
-const BAR = 10
-const WAVE_MAX = 26
+const HEIGHT = props.compact ? 22 : 48
+const BAR_Y = props.compact ? 17 : 35
+const BAR = props.compact ? 4 : 10
+const WAVE_MAX = props.compact ? 12 : 26
+const THUMB = props.compact ? 12 : 22
 
 const FALLBACK = { primary: '#ffffff', secondary: '#c9ced6', soft: '#ffffff' }
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
@@ -104,7 +112,7 @@ function draw() {
 
   const end = (width * shownPercent) / 100
 
-  ctx.fillStyle = 'rgb(255 255 255 / 0.2)'
+  ctx.fillStyle = props.trackColor
   pill(0, width)
 
   if (level > 0.005 && end > 2) {

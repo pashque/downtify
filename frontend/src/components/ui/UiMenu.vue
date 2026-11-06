@@ -10,7 +10,7 @@
         v-if="open"
         ref="menuEl"
         role="menu"
-        class="fixed z-[70] min-w-52 max-w-72 overflow-hidden rounded-[12px] border border-line-3 bg-surface py-1.5 shadow-float"
+        class="fixed z-[70] min-w-52 max-w-72 max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain rounded-[12px] border border-line-3 bg-surface py-1.5 shadow-float"
         :style="position"
         @keydown="onKeydown"
       >
@@ -91,14 +91,14 @@ async function show(nextAnchor) {
   menuEl.value?.querySelector('button:not(:disabled)')?.focus()
   document.addEventListener('pointerdown', onOutside, true)
   window.addEventListener('resize', hide)
-  window.addEventListener('scroll', hide, true)
+  window.addEventListener('scroll', onScroll, true)
 }
 
 function hide() {
   open.value = false
   document.removeEventListener('pointerdown', onOutside, true)
   window.removeEventListener('resize', hide)
-  window.removeEventListener('scroll', hide, true)
+  window.removeEventListener('scroll', onScroll, true)
 }
 
 function toggle() {
@@ -122,6 +122,12 @@ function openAt(event) {
   show({ x: event.clientX, y: event.clientY, width: 0, height: 0, point: true })
 }
 
+function onScroll(event) {
+  // A long menu scrolls independently; only scrolling its anchor page closes it.
+  if (menuEl.value?.contains(event.target)) return
+  hide()
+}
+
 function onOutside(event) {
   if (menuEl.value?.contains(event.target)) return
   if (triggerEl.value?.contains(event.target)) return
@@ -137,6 +143,8 @@ function onKeydown(event) {
   const buttons = [...menuEl.value.querySelectorAll('button:not(:disabled)')]
   const index = buttons.indexOf(document.activeElement)
   if (event.key === 'Escape') {
+    // Only the menu closes, not a dialog/player underneath it.
+    event.stopPropagation()
     hide()
     triggerEl.value?.querySelector('button')?.focus()
   } else if (event.key === 'ArrowDown') {

@@ -33,6 +33,21 @@ const ROWS = [
 ]
 
 describe('useSimilar', () => {
+  it('preserves case-sensitive and provider-scoped IDs and delimiter-distinct id-less rows', async () => {
+    const similar = useSimilar()
+    const seed = { song_id: 'AbC', provider: 'spotify', artists: ['A|B'], name: 'C' }
+    const next = [
+      { ...seed, song_id: 'abc' },
+      { ...seed, provider: 'deezer' },
+      { artists: ['A'], name: 'B|C' },
+    ]
+    getSimilarTracks.mockResolvedValueOnce({ data: { tracks: [seed, { artists: ['A|B'], name: 'C' }] } })
+    await similar.searchFor('Artist', 'Song')
+    getSimilarTracks.mockResolvedValueOnce({ data: { tracks: next } })
+    expect(await similar.loadMore()).toEqual(next)
+    expect(similar.songs.value[0].provider).toBe('spotify')
+  })
+
   it('maps rows to downloadable songs', async () => {
     getSimilarTracks.mockResolvedValueOnce({
       data: { artist: 'Cher', track: 'Believe', tracks: ROWS },

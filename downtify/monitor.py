@@ -844,10 +844,11 @@ async def check_playlist(
 ) -> int:
     """Fetch playlist, detect new tracks, download them. Returns count downloaded.
 
-    With ``library`` stores, new tracks already in the library (by Spotify
-    id, when *Overwrite existing files* is off) are linked instead of
-    downloaded, every downloaded track is registered in them, and the
-    playlist's catalog and Navidrome playlist are synced after the sweep.
+    With ``library`` stores, physically existing catalog identities seed the
+    watch before downloads begin. Managed storage reuses only the intended
+    destination (monitoring is missing-only, independent of overwrite).
+    Downloaded tracks are registered and the catalog/Navidrome are synced
+    after the sweep; legacy storage retains its global-index policy.
     """
     logger.info(
         'Checking monitored playlist "{}" ({})',
@@ -895,14 +896,10 @@ async def check_playlist(
     # against the filesystem each time (which is O(tracks) globs per
     # write, and quadratic over a large sweep).
     #
-    # A track already in `downloaded_tracks` is trusted as downloaded
-    # without checking whether its file is still on disk — the file may
-    # have been moved elsewhere in the filesystem outside the downloads
-    # directory (e.g. into a separate media library), which must not
-    # cause a re-download on every single sweep. A file that's actually
-    # gone (deleted, not just moved) is instead noticed and forgotten by
-    # the hourly :func:`reconcile_downloaded_tracks` sweep, which is what
-    # makes such a track eligible for re-download again.
+    # Legacy storage trusts watch history until hourly reconciliation, so
+    # externally moved files don't cause repeated downloads. Managed storage
+    # instead validates physical presence and destination scope. Catalog and
+    # destination identities are resolved once before the first download.
     resolved: dict[str, str] = {}
 
     new_tracks, linked_from_library = await _split_new_tracks(
@@ -937,10 +934,19 @@ async def check_playlist(
         def _make_cb(s: dict, name: str) -> ProgressCallback:
             return _progress_cb(s, name, broadcast, loop)
 
+        from .download_destination import managed_destination
+
+        # Enrichment may reveal an existing target not resolvable from the
+        # sparse playlist row. Keep the downloader's late check missing-only
+        # without changing shared settings or the cached source track.
+        download_song = (
+            {**song, 'downtify_download_mode': 'missing'}
+            if managed_destination(downloader) else song
+        )
         try:
             filename = await loop.run_in_executor(
                 DOWNLOAD_EXECUTOR,
-                lambda s=song: downloader.download(
+                lambda s=download_song: downloader.download(
                     s, _make_cb(s, pl_name), subdir=pl_subdir
                 ),
             )
@@ -982,10 +988,10 @@ async def check_playlist(
         last_track_count=len(tracks),
     )
 
-    if downloaded > 0 or linked_from_library > 0:
-        known_tracks = await asyncio.to_thread(
-            db.get_track_filenames, playlist.id
-        )
+    if downloaded > 0 or linked_from_library > 0 or resolved:
+        # Use this sweep's accepted identities, not rejected stale rows from
+        # watch history (e.g. an old copy in a different destination).
+        known_tracks = {tid: filename for tid, filename in resolved.items()}
         if settings is None or settings.get('generate_m3u', True):
             await asyncio.to_thread(
                 _regenerate_m3u,
@@ -1025,33 +1031,49 @@ async def _split_new_tracks(
 ) -> tuple[list[dict[str, Any]], int]:
     """``(tracks to download, number linked from the library)``.
 
-    Tracks the watch already recorded are skipped (and their filenames
-    added to ``resolved``). With *Overwrite existing files* off, a new
-    track the track index already has on disk is recorded for the watch
-    instead of being downloaded again.
+    Catalog membership recovers manual downloads missing from watch history.
+    Source-identified files can retain old names, but managed storage requires
+    the intended physical parent. Exact destination discovery also handles
+    unindexed files. Legacy storage keeps its overwrite/global-index policy.
     """
 
+    from .download_destination import managed_destination
+
+    managed = managed_destination(downloader)
     new_tracks: list[dict[str, Any]] = []
     linked = 0
-    link_existing = library.track_index is not None and not getattr(
+    link_existing = managed or (library.track_index is not None and not getattr(
         downloader, 'overwrite_existing_files', True
+    ))
+    # Manual downloads populate the catalog, not the watch's private history.
+    # Recover that identity before starting a sweep, including renamed files.
+    catalog = (
+        await asyncio.to_thread(library.playlist_catalog.list_tracks, playlist.name)
+        if library.playlist_catalog is not None else []
     )
+    catalog_files = {row['track_spotify_id']: row['filename'] for row in catalog}
     for track in tracks:
         tid = track.get('song_id')
         if not tid:
             continue
         if tid in known_tracks:
             stored = known_tracks[tid]
-            if stored is not None:
-                resolved[tid] = stored
-            continue
-        existing = (
-            await asyncio.to_thread(
-                _library_file_for, track, downloader, library
+            if not managed or (stored and await asyncio.to_thread(
+                _watch_file_at_destination, stored, track, playlist, downloader
+            )):
+                if stored is not None:
+                    resolved[tid] = stored
+                continue
+        existing = catalog_files.get(tid)
+        if existing and not await asyncio.to_thread(
+            _watch_file_at_destination, existing, track, playlist, downloader
+        ):
+            existing = None
+        if existing is None and link_existing:
+            existing = await asyncio.to_thread(
+                _library_file_for, track, downloader, library,
+                m3u.sanitize_playlist_name(playlist.name),
             )
-            if link_existing
-            else None
-        )
         if not existing:
             new_tracks.append(track)
             continue
@@ -1069,10 +1091,45 @@ async def _split_new_tracks(
     return new_tracks, linked
 
 
+def _watch_file_at_destination(
+    filename: str, song: dict[str, Any], playlist: MonitoredPlaylist,
+    downloader: Downloader,
+) -> bool:
+    """Stat a source-identified copy and enforce managed destination scope.
+
+    Identity may outlive a title/template spelling change, but a copy in
+    another playlist/album directory must not satisfy this watch.
+    """
+    full = locate_library_file(
+        filename, downloader.download_dir, slskd_dir_from_downloader(downloader)
+    )
+    if full is None:
+        return False
+    from .download_destination import managed_destination
+
+    if not managed_destination(downloader):
+        return True
+    expected = downloader.expected_stem_for(
+        song, m3u.sanitize_playlist_name(playlist.name)
+    )
+    parent = (Path(downloader.download_dir) / expected).parent.resolve()
+    return full.resolve().parent == parent
+
+
 def _library_file_for(
-    song: dict[str, Any], downloader: Downloader, library: LibraryStores
+    song: dict[str, Any], downloader: Downloader, library: LibraryStores,
+    subdir: Optional[str] = None,
 ) -> Optional[str]:
-    """The library path already holding ``song`` per the track index."""
+    """Find a destination-aware copy, retaining legacy global-index semantics."""
+
+    from .download_destination import managed_destination
+    from .track_index import resolve_existing_download
+
+    if managed_destination(downloader):
+        result = resolve_existing_download(
+            downloader, song, subdir=subdir, track_index=library.track_index
+        )
+        return result[0] if result else None
 
     tid = normalize_spotify_track_id(song)
     if not tid or library.track_index is None:
@@ -1196,7 +1253,8 @@ def _sync_library_playlist(
     download_dir = Path(downloader.download_dir)
     slskd_dir = slskd_dir_from_downloader(downloader)
     rows: list[tuple[dict[str, Any], str, Path]] = []
-    for song in tracks:
+    positions: list[int] = []
+    for position, song in enumerate(tracks):
         filename = known_tracks.get(song.get('song_id') or '')
         full = (
             locate_library_file(filename, download_dir, slskd_dir)
@@ -1205,12 +1263,14 @@ def _sync_library_playlist(
         )
         if full is not None:
             rows.append((song, filename, full))
+            positions.append(position)
 
     if library.playlist_catalog is not None and rows:
         try:
             library.playlist_catalog.replace_playlist_tracks(
                 playlist.name,
                 rows,
+                track_orders=positions,
                 spotify_id=_catalog_spotify_id(playlist),
                 user_id=playlist.user_id or None,
             )
@@ -1455,8 +1515,9 @@ def _regenerate_m3u(
 
     With *resolved* (``{track_id: filename}``) filenames are taken from
     that map alone — the cheap path used for the rewrite after each
-    individual download. Without it every track is resolved against the
-    filesystem instead, which is the authoritative view used for the
+    individual download, preserving other playable entries already in the
+    M3U until the authoritative final rewrite. Without it every track is
+    resolved against the filesystem instead, the authoritative view for the
     final rewrite at the end of a sweep: the watch's recorded filename
     (``known_tracks``) when that file exists — it may be a track linked
     from elsewhere in the library, e.g. an slskd download — else the
@@ -1496,13 +1557,17 @@ def _regenerate_m3u(
     # When organize-by-artist/album is on the tracks live in those folders
     # rather than the per-playlist subfolder, so the M3U goes to the legacy
     # Playlists/ directory where its relative paths still resolve.
-    organize = downloader.organize_by_artist or downloader.organize_by_album
+    from downtify.folder_settings import downloader_uses_shared_playlists
+
+    organize = downloader_uses_shared_playlists(downloader)
     path, _kept = m3u.write_m3u(
         downloader.download_dir,
         playlist.name,
         entries,
         playlist_subdir=None if organize else pl_subdir,
         slskd_dir=slskd_dir,
+        preserve_existing=resolved is not None,
+        source_order=[entry['filename'] for entry in entries] if resolved is not None else None,
     )
     return path
 
@@ -1520,7 +1585,9 @@ def _download_cover_for_watch(
     folder fills up.
     """
 
-    organize = downloader.organize_by_artist or downloader.organize_by_album
+    from downtify.folder_settings import downloader_uses_shared_playlists
+
+    organize = downloader_uses_shared_playlists(downloader)
     pl_subdir = m3u.sanitize_playlist_name(playlist.name)
     m3u_path = m3u.m3u_path_for(
         downloader.download_dir,

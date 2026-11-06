@@ -7,6 +7,7 @@ authentication and no premium account are required.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import threading
@@ -225,10 +226,13 @@ def _embed_row_track(item: dict[str, Any]) -> Optional[dict[str, Any]]:
 
     inner = item.get('track')
     if isinstance(inner, dict):
+        merged = dict(inner)
+        if not inner.get('artists') and item.get('artists'):
+            merged['artists'] = item['artists']
         sub = item.get('subtitle')
         if isinstance(sub, str) and sub.strip() and not inner.get('subtitle'):
-            return {**inner, 'subtitle': sub}
-        return inner
+            merged['subtitle'] = sub
+        return merged
     return item if isinstance(item, dict) else None
 
 
@@ -270,6 +274,8 @@ def _cover_url(entity: dict[str, Any]) -> str:
 
 def _artist_names(entity: dict[str, Any]) -> list[str]:
     raw = entity.get('artists') or []
+    if isinstance(raw, dict):
+        raw = raw.get('items') or []
     names: list[str] = []
     if isinstance(raw, list):
         for item in raw:
@@ -277,9 +283,12 @@ def _artist_names(entity: dict[str, Any]) -> list[str]:
                 if item.strip():
                     names.append(item.strip())
             elif isinstance(item, dict):
-                name = item.get('name')
-                if name:
-                    names.append(name)
+                profile = item.get('profile')
+                name = item.get('name') or (
+                    profile.get('name') if isinstance(profile, dict) else None
+                )
+                if isinstance(name, str) and name.strip():
+                    names.append(name.strip())
     if names:
         return names
     return [
@@ -287,6 +296,25 @@ def _artist_names(entity: dict[str, Any]) -> list[str]:
         for d in _artists_from_subtitle(entity.get('subtitle'))
         if d.get('name')
     ]
+
+
+def _artist_ids(entity: dict[str, Any], names: list[str]) -> list[str]:
+    """IDs aligned to existing display credits; missing IDs stay empty, offline."""
+    raw = entity.get('artists') or []
+    if isinstance(raw, dict):
+        raw = raw.get('items') or []
+    known: dict[str, set[str]] = {}
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('name') or (item.get('profile') or {}).get('name')
+        artist_id = str(item.get('id') or '')
+        uri = item.get('uri')
+        if isinstance(uri, str) and uri.startswith('spotify:artist:'):
+            artist_id = _id_from_uri(uri)
+        if name and re.fullmatch(r'[A-Za-z0-9]{22}', artist_id):
+            known.setdefault(name, set()).add(artist_id)
+    return [next(iter(known[name])) if len(known.get(name, ())) == 1 else '' for name in names]
 
 
 def _normalize_release_date_text(raw: Any) -> str:
@@ -404,8 +432,8 @@ def _release_date_raw_from_field(release: Any, *, _depth: int = 0) -> str:
     return ''
 
 
-def _album_release_date_from_open_page(album_id: str) -> str:
-    """Parse release date from the public album HTML when embed omits it."""
+def _album_open_page(album_id: str) -> str:
+    """Fetch public album HTML, shared by date and credit recovery."""
 
     if not album_id or not re.fullmatch(r'[A-Za-z0-9]+', album_id):
         return ''
@@ -426,7 +454,15 @@ def _album_release_date_from_open_page(album_id: str) -> str:
         )
         return ''
 
-    html = resp.text
+    return resp.text
+
+
+def _album_release_date_from_open_page(
+    album_id: str, *, html: Optional[str] = None
+) -> str:
+    """Parse release date, reusing an already fetched canonical page."""
+    if html is None:
+        html = _album_open_page(album_id)
     m = _ALBUM_OPEN_PAGE_META_RELEASE.search(html)
     if not m:
         m = _ALBUM_OPEN_PAGE_DATE_PUBLISHED.search(html)
@@ -493,6 +529,9 @@ def _track_dict(
         'song_id': track_id,
         'name': entity.get('name') or entity.get('title') or '',
         'artists': names,
+        'artist_ids': _artist_ids(entity, names),
+        'artists_structured': entity.get('artists_structured', bool(entity.get('artists'))),
+        'album_id': str(album.get('id') or _id_from_uri(album.get('uri') or '')) if isinstance(album, dict) else '',
         'artist': ', '.join(names),
         'album_name': album_name or fallback_album,
         'cover_url': cover,
@@ -516,6 +555,9 @@ def _track_dict(
         if tn > 0:
             row['track_number'] = tn
     if isinstance(album, dict):
+        album_artists = _artist_names(album)
+        if album_artists:
+            row['album_artist'] = ', '.join(album_artists)
         raw_total = album.get('trackCount')
         if raw_total is None and isinstance(album.get('tracks'), dict):
             raw_total = album['tracks'].get('total')
@@ -540,10 +582,14 @@ def _merge_full_track_metadata(
         'year',
         'release_date',
         'album_name',
+        'album_artist',
         'artists',
         'artist',
         'track_number',
         'album_track_total',
+        'artist_ids',
+        'artists_structured',
+        'album_id',
     ):
         value = full.get(key)
         if value is None or not value or value == []:
@@ -558,6 +604,8 @@ def _merge_full_track_metadata(
             if iv <= 0:
                 continue
             merged[key] = iv
+            continue
+        if key in {'artist_ids', 'artists_structured'} and merged.get('artists') != full.get('artists'):
             continue
         if key == 'artists':
             if merged.get('artists'):
@@ -594,7 +642,10 @@ def enrich_track_from_spotify_if_sparse(
         or str(song.get('year') or '').strip()
     )
     has_track = song.get('track_number') is not None
-    need_album = with_album and not str(song.get('album_name') or '').strip()
+    need_album = with_album and (
+        not str(song.get('album_name') or '').strip()
+        or not str(song.get('album_artist') or '').strip()
+    )
     if has_date and has_track and not need_album:
         return song
     try:
@@ -627,7 +678,9 @@ def track_from_id(
     payload = _fetch_embed_json('track', track_id)
     entity = _entity_from(payload)
     song = _track_dict(entity, track_id=track_id)
-    if with_album and not song.get('album_name'):
+    if with_album and (
+        not song.get('album_name') or not song.get('album_artist')
+    ):
         _fill_album_from_open_page(song, track_id)
     return song
 
@@ -685,6 +738,9 @@ def _fill_album_from_open_page(song: dict[str, Any], track_id: str) -> None:
     if not name:
         return
     song['album_name'] = name
+    album_artists = _artist_names(entity)
+    if album_artists:
+        song['album_artist'] = ', '.join(album_artists)
     if track_number and not song.get('track_number'):
         song['track_number'] = track_number
     track_items = (
@@ -694,6 +750,93 @@ def _fill_album_from_open_page(song: dict[str, Any], track_id: str) -> None:
     )
     if track_items and not song.get('album_track_total'):
         song['album_track_total'] = len(track_items)
+
+
+def _canonical_release_type(html: str, album_id: str, album_name: str) -> str:
+    """Read the exact public album entity, not a neighbouring recommendation."""
+    match = re.search(r'<script\b[^>]*\bid=["\']initialState["\'][^>]*>(.*?)</script>', html, re.DOTALL)
+    if not match:
+        return ''
+    try:
+        state = json.loads(base64.b64decode(match.group(1).strip()))
+        uri = f'spotify:album:{album_id}'
+        album = state['entities']['items'][uri]
+        kind = str(album.get('type') or '').lower()
+        if album.get('uri') == uri and album.get('name') == album_name and kind in {'album', 'single', 'ep', 'compilation'}:
+            return kind
+    except (ValueError, TypeError, KeyError, AttributeError):
+        pass
+    return ''
+
+
+def _album_credit_tracks(
+    html: str, album_id: str, album_name: str
+) -> dict[str, dict[str, Any]]:
+    """Index exact-edition initialState tracks; never replace the embed list."""
+    match = re.search(
+        r'<script\b[^>]*\bid=["\']initialState["\'][^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not match:
+        return {}
+    try:
+        state = json.loads(base64.b64decode(match.group(1).strip()))
+        uri = f'spotify:album:{album_id}'
+        album = state['entities']['items'][uri]
+        if album.get('uri') != uri or album.get('name') != album_name:
+            return {}
+        items = album['tracksV2']['items']
+        if not isinstance(items, list):
+            return {}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {}
+    tracks: dict[str, dict[str, Any]] = {}
+    duplicates: set[str] = set()
+    for item in items:
+        track = item.get('track') if isinstance(item, dict) else None
+        if not isinstance(track, dict):
+            continue
+        track_uri = track.get('uri')
+        if not isinstance(track_uri, str) or not re.fullmatch(
+            r'spotify:track:[A-Za-z0-9]{22}', track_uri
+        ):
+            continue
+        if track.get('id') is not None and track['id'] != _id_from_uri(track_uri):
+            continue
+        if track_uri in tracks:
+            duplicates.add(track_uri)
+        tracks[track_uri] = track
+    return {uri: track for uri, track in tracks.items() if uri not in duplicates}
+
+
+def _recover_album_row_credits(
+    row: dict[str, Any], tracks: dict[str, dict[str, Any]]
+) -> None:
+    """Recover boundaries only when identity, title and full text agree."""
+    if row.get('artists_structured'):
+        return
+    track = tracks.get(f'spotify:track:{row["song_id"]}')
+    if not track or track.get('name') != row.get('name'):
+        return
+    album = track.get('albumOfTrack')
+    if isinstance(album, dict) and (
+        album.get('uri') != f'spotify:album:{row["album_id"]}'
+        or album.get('name') != row.get('album_name')
+    ):
+        return
+    raw = track.get('artists')
+    if not isinstance(raw, dict) or not isinstance(raw.get('items'), list):
+        return
+    # Reject incomplete/malformed credits rather than blessing a partial list.
+    names = _artist_names({'artists': raw})
+    if not names or len(names) != len(raw['items']):
+        return
+    if ', '.join(names) != row.get('artist'):
+        return
+    row['artists'] = names
+    row['artist_ids'] = _artist_ids(track, names)
+    row['artists_structured'] = True
 
 
 def album_tracks_from_id(album_id: str) -> list[dict[str, Any]]:
@@ -707,9 +850,28 @@ def album_tracks_from_id(album_id: str) -> list[dict[str, Any]]:
         or []
     )
     album_track_total = len(track_items)
+    # One canonical request per album, only for rows without real credits.
+    html: Optional[str] = None
+    if (
+        entity.get('uri') == f'spotify:album:{album_id}'
+        and re.fullmatch(r'[A-Za-z0-9]{22}', album_id)
+        and any(
+            isinstance(item, dict)
+            and (track := _embed_row_track(item)) is not None
+            and not track.get('artists')
+            for item in track_items
+        )
+    ):
+        html = _album_open_page(album_id)
     album_release_date = _release_date_str(entity)
     if not album_release_date:
-        album_release_date = _album_release_date_from_open_page(album_id)
+        album_release_date = (
+            _album_release_date_from_open_page(album_id, html=html)
+            if html is not None
+            else _album_release_date_from_open_page(album_id)
+        )
+    credit_tracks = _album_credit_tracks(html or '', album_id, album_name)
+    release_type = _canonical_release_type(html or '', album_id, album_name)
     songs: list[dict[str, Any]] = []
     for tracklist_slot, item in enumerate(track_items, start=1):
         if not isinstance(item, dict):
@@ -722,6 +884,7 @@ def album_tracks_from_id(album_id: str) -> list[dict[str, Any]]:
             continue
         track = dict(track)
         if not track.get('artists') and not track.get('subtitle'):
+            track['artists_structured'] = bool(entity.get('artists'))
             track['artists'] = (
                 entity.get('artists')
                 or _artists_from_subtitle(entity.get('subtitle'))
@@ -734,9 +897,16 @@ def album_tracks_from_id(album_id: str) -> list[dict[str, Any]]:
             fallback_cover=cover,
             fallback_release_date=album_release_date,
         )
+        row['album_id'] = album_id
+        if release_type:
+            row['release_type'] = release_type
         row['track_number'] = tracklist_slot
+        album_artists = _artist_names(entity)
+        if album_artists:
+            row['album_artist'] = ', '.join(album_artists)
         row['album_track_total'] = album_track_total
         row['preview_url'] = _track_preview_url(track)
+        _recover_album_row_credits(row, credit_tracks)
         songs.append(row)
     return songs
 
@@ -785,14 +955,15 @@ def _with_embed_previews(
 
 
 def _artists_from_subtitle(subtitle: Any) -> list[dict[str, str]]:
+    """Opaque display fallback, not a structured credit list.
+
+    A comma may belong to a single name; splitting here irreversibly
+    corrupts future ARTISTS tags. Prefer real artist entities at callers.
+    """
     if not isinstance(subtitle, str) or not subtitle:
         return []
-    normalized = subtitle.replace('\xa0', ' ')
-    return [
-        {'name': name.strip()}
-        for name in re.split(r'\s*(?:,|，)\s*', normalized)
-        if name.strip()
-    ]
+    normalized = subtitle.replace('\xa0', ' ').strip()
+    return [{'name': normalized}] if normalized else []
 
 
 def _token_from_embed_payload(payload: dict[str, Any]) -> Optional[str]:
@@ -861,6 +1032,9 @@ def _track_dict_from_graphql_item(
         'song_id': track_id,
         'name': track.get('name') or '',
         'artists': artists,
+        'artist_ids': _artist_ids(track, artists),
+        'artists_structured': True,
+        'album_id': str(album.get('id') or _id_from_uri(album.get('uri') or '')),
         'artist': ', '.join(artists),
         'album_name': album_name,
         'cover_url': cover_url,
@@ -1160,32 +1334,52 @@ def _artist_discography(artist_id: str, token: str) -> dict[str, Any]:
 
 
 def _artist_full_discography(artist_id: str, token: str) -> dict[str, Any]:
-    """Every release of an artist, paging through ``queryArtistDiscographyAll``.
+    """Paged releases with explicit ``completeness`` metadata.
 
-    Returns ``{'all': {'items': [...]}}``: one item per release group
+    Returns ``{'all': {'items': [...]}, 'completeness': {...}}``: one item per release group
     (a release and its alternate editions), in the same shape
-    :func:`_artist_releases` reads from the overview.
+    :func:`_artist_releases` reads from the overview. Preserve successful pages
+    after a later failure; page caps and early exhaustion are not complete.
     """
 
     items: list[Any] = []
+    total = None
     for _ in range(_DISCOGRAPHY_MAX_PAGES):
-        data = _partner_query(
-            'queryArtistDiscographyAll',
-            {
-                'uri': f'spotify:artist:{artist_id}',
-                'locale': '',
-                'offset': len(items),
-                'limit': _DISCOGRAPHY_PAGE_LIMIT,
-            },
-            _ARTIST_DISCOGRAPHY_HASH,
-            token,
-        )
-        page = data['artistUnion']['discography']['all']
+        try:
+            data = _partner_query(
+                'queryArtistDiscographyAll',
+                {
+                    'uri': f'spotify:artist:{artist_id}',
+                    'locale': '',
+                    'offset': len(items),
+                    'limit': _DISCOGRAPHY_PAGE_LIMIT,
+                },
+                _ARTIST_DISCOGRAPHY_HASH,
+                token,
+            )
+            page = data['artistUnion']['discography']['all']
+        except Exception:
+            if not items:
+                raise
+            logger.opt(exception=True).warning('Spotify discography page failed for {}', artist_id)
+            return {'all': {'items': items}, 'completeness': {
+                'complete': False, 'reason': 'page_failure', 'source': 'full',
+                'fetched_groups': len(items), 'total_groups': total,
+            }}
         batch = page.get('items') or []
         items.extend(batch)
-        if not batch or len(items) >= (page.get('totalCount') or 0):
-            break
-    return {'all': {'items': items}}
+        if isinstance(page.get('totalCount'), int):
+            total = page['totalCount']
+        if not batch or (isinstance(total, int) and len(items) >= total):
+            complete = total is None or len(items) >= total
+            return {'all': {'items': items}, 'completeness': {
+                'complete': complete, 'reason': 'exhausted' if complete else 'early_empty_page', 'source': 'full',
+                'fetched_groups': len(items), 'total_groups': total,
+            }}
+    return {'all': {'items': items}, 'completeness': {
+        'complete': False, 'reason': 'page_cap', 'source': 'full',
+        'fetched_groups': len(items), 'total_groups': total,
+    }}
 
 
 _RELEASE_TYPES = {
@@ -1256,6 +1450,8 @@ def _artist_releases(
             'album_id': album_id,
             'name': node['name'].strip(),
             'artists': [artist_name] if artist_name else [],
+            **({'artist_ids': _artist_ids(node, [artist_name])}
+               if artist_name and any(_artist_ids(node, [artist_name])) else {}),
             'artist': artist_name,
             'cover_url': _largest_image(
                 cover.get('sources') or [] if isinstance(cover, dict) else []
@@ -1271,6 +1467,7 @@ def _artist_releases(
 
 def artist_page_from_id(
     artist_id: str,
+    *, metadata: Optional[dict[str, Any]] = None,
 ) -> tuple[str, str, list[dict[str, Any]]]:
     """``(name, cover_url, releases)`` for a Spotify artist.
 
@@ -1283,13 +1480,19 @@ def artist_page_from_id(
 
     _, name, cover_url, token = _artist_entity(artist_id)
     releases: list[dict[str, Any]] = []
+    quality = {'complete': False, 'reason': 'unavailable', 'source': 'none'}
     if token:
         for source, fetch in (
             ('full discography', _artist_full_discography),
             ('overview', _artist_discography),
         ):
             try:
-                releases = _artist_releases(fetch(artist_id, token), name)
+                discography = fetch(artist_id, token)
+                releases = _artist_releases(discography, name)
+                quality = discography.get('completeness') or {
+                    'complete': False, 'reason': 'overview_fallback' if source == 'overview' else 'unknown',
+                    'source': 'overview' if source == 'overview' else 'full',
+                }
                 break
             except Exception:
                 logger.opt(exception=True).warning(
@@ -1297,6 +1500,8 @@ def artist_page_from_id(
                     artist_id,
                     source,
                 )
+    if metadata is not None:
+        metadata.update(quality)
     return name, cover_url, releases
 
 
@@ -1751,11 +1956,15 @@ def _search_suggestion_items(text: str) -> list[Any]:
     ).get('itemsV2') or []
 
 
+def _artist_name_identity(name: str) -> str:
+    import unicodedata
+    return ' '.join(unicodedata.normalize('NFKC', name).lower().split())
+
+
 def search_artist_by_name(name: str) -> Optional[dict[str, str]]:
     """``{id, name}`` of the Spotify artist whose name matches *name*
-    exactly - ignoring case and the characters a file name can't hold, so
-    ``ACDC`` finds ``AC/DC`` (see :func:`downtify.file_naming.file_name_key`)
-    - or ``None``.
+    exactly after NFKC/case/whitespace normalization, preserving punctuation
+    (``ACDC`` is not ``AC/DC``), or ``None``.
 
     Spotify has no public search API, but the web player's own
     search-as-you-type box also returns the top entities, artists included
@@ -1769,7 +1978,7 @@ def search_artist_by_name(name: str) -> Optional[dict[str, str]]:
     """
 
     text = name.strip()
-    wanted = file_name_key(text)
+    wanted = _artist_name_identity(text)
     if not wanted:
         return None
     try:
@@ -1777,7 +1986,7 @@ def search_artist_by_name(name: str) -> Optional[dict[str, str]]:
     except ValueError:
         return None
     for artist in search_results(items)['artists']:
-        if file_name_key(artist['name']) == wanted:
+        if _artist_name_identity(artist['name']) == wanted:
             return {'id': artist['id'], 'name': artist['name']}
     return None
 
@@ -1832,6 +2041,9 @@ def search_results(items: list[Any]) -> dict[str, list[dict[str, Any]]]:
                     'id': item_id,
                     'name': name,
                     'artists': [a for a in artists if a],
+                    'artist_ids': _artist_ids(data, [a for a in artists if a]),
+                    'artists_structured': True,
+                    'album_id': item_id,
                     'year': str(year) if year else '',
                     'cover_url': _largest_image(
                         (data.get('coverArt') or {}).get('sources') or []

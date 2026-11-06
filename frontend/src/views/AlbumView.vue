@@ -7,8 +7,10 @@
       :missing="t('album.notFound')"
     >
       <CollectionHero
+        :playing="isThisPlaying"
         :title="album.title"
-        :kicker="[t('album.kicker'), album.year].filter(Boolean).join(' · ')"
+        :kicker="[releaseKicker(effectiveType, t), album.year].filter(Boolean).join(' · ')"
+        :loading="sourceLoading || targetLoading"
         :cover="album.cover"
         :name="album.title"
       >
@@ -16,10 +18,13 @@
           <RouterLink
             v-if="album.artist"
             :to="{ name: 'Artist', query: { name: album.artist } }"
-            class="font-semibold text-fg hover:underline"
+            class="font-semibold text-fg hover:underline max-md:block"
             >{{ album.artist }}</RouterLink
           >
-          <span v-for="part in facts" :key="part"> · {{ part }}</span>
+          <!-- Phones: the facts start on their own line under the artist. -->
+          <span v-for="(part, i) in facts" :key="part" class="whitespace-nowrap"
+            ><span :class="i === 0 && album.artist ? 'max-md:hidden' : ''"> · </span>{{ part }}</span
+          >
         </template>
         <template #actions>
           <PlayButton
@@ -32,30 +37,70 @@
             :label="t('actions.shuffle')"
             size="lg"
             round
-            @click="actions.play(album.tracks, 0, context, { shuffled: true })"
+            :active="player.shuffle.value"
+            toggle
+            @click="player.toggleShuffle()"
           />
           <UiButton
             variant="ghost"
             icon="queue"
-            @click="actions.enqueue(album.tracks)"
+            @click="actions.enqueue(albumQueue)"
           >
             {{ t('actions.addToQueue') }}
           </UiButton>
           <UiButton
+            v-if="sourceSongs && targetLoaded && !albumComplete"
             variant="ghost"
-            icon="zip"
-            class="max-sm:hidden"
-            @click="actions.downloadZip(album.tracks)"
+            icon="download"
+            :loading="submitting"
+            :disabled="!targetLoaded"
+            @click="downloadAlbum"
           >
-            {{ t('library.downloadZip') }}
+            {{ albumButtonLabel }}
           </UiButton>
+          <EditionMenu
+            v-if="editionOptions.length > 1"
+            :model-value="edition"
+            :options="editionOptions"
+            :label="t('library.tracks')"
+            icon="disc"
+            data-album-version
+            @update:model-value="selectEdition"
+          />
           <UiMenu :items="menu" :label="t('common.more')" size="lg" />
         </template>
       </CollectionHero>
 
       <section class="mx-auto max-w-[1680px] px-4 sm:px-6 lg:px-10">
+        <TrackDownPlayList
+          v-if="sourceSongs"
+          :songs="sourceSongs"
+          :queue="albumQueue"
+          :context="context"
+          hide-album
+          @contextmenu="openRowMenu"
+        >
+          <template #heart="{ song }"><LikeButton v-if="localTrack(song)" :file="localTrack(song).file" /></template>
+          <template #actions="{ song }">
+            <span
+              v-if="localTrack(song)"
+              class="flex items-center justify-end"
+              @click.stop
+              @dblclick.stop
+            >
+              <UiMenu
+                :ref="(el) => (rowMenus[song.song_id || song.url] = el)"
+                :items="rowMenu(song)"
+                :label="t('common.more')"
+                size="sm"
+              />
+            </span>
+            <SourceSongMenu v-else :song="song" />
+          </template>
+        </TrackDownPlayList>
         <TrackList
-          :tracks="album.tracks"
+          v-else
+          :tracks="albumQueue"
           :context="context"
           :show-album="false"
           :show-added="false"
@@ -81,7 +126,7 @@
           >
         </div>
         <div
-          class="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6"
+          class="tile-grid"
         >
           <MediaTile
             v-for="other in moreByArtist"
@@ -91,6 +136,7 @@
               query: { artist: other.artist, title: other.title },
             }"
             :title="other.title"
+            :release-type="other.release_type || ''"
             :subtitle="other.year"
             :cover="other.cover"
             :name="other.title"
@@ -108,17 +154,28 @@ import { useRoute, useRouter } from 'vue-router'
 import UiButton from '/src/components/ui/UiButton.vue'
 import UiIconButton from '/src/components/ui/UiIconButton.vue'
 import UiMenu from '/src/components/ui/UiMenu.vue'
+import EditionMenu from '/src/components/library/EditionMenu.vue'
 import CollectionHero from '/src/components/library/CollectionHero.vue'
 import DetailState from '/src/components/library/DetailState.vue'
 import MediaTile from '/src/components/library/MediaTile.vue'
 import PlayButton from '/src/components/library/PlayButton.vue'
 import TrackList from '/src/components/library/TrackList.vue'
+import TrackDownPlayList from '/src/components/library/TrackDownPlayList.vue'
+import SourceSongMenu from '/src/components/library/SourceSongMenu.vue'
+import LikeButton from '/src/components/player/LikeButton.vue'
+import { useAlbumSource, useAlbumDestination, albumEditionOptions } from '/src/model/albumSource'
+import { downloadReleaseLabel, effectiveReleaseType, releaseKicker } from '/src/lib/releaseType'
+import { useDownloadManager } from '/src/model/download'
+import { useUi } from '/src/model/ui'
 import { useLibrary } from '/src/model/library'
 import { usePlayer } from '/src/model/player'
 import { usePlaylistActions } from '/src/model/playlistActions'
 import { useTrackActions } from '/src/model/trackActions'
 import { useVisibility } from '/src/model/visibility'
-import { albumKey } from '/src/lib/library'
+import { albumKey, dedupeAlbumTracks } from '/src/lib/library'
+import { openAlbumOn } from '/src/lib/sourceLinks'
+import { selectedAlbumMetadata } from '/src/lib/albumRouting'
+import API from '/src/model/api'
 import { formatBytes, splitLength } from '/src/lib/format'
 import { useI18n } from '/src/i18n'
 
@@ -132,6 +189,67 @@ const playlistActions = usePlaylistActions()
 const visibility = useVisibility()
 
 const ready = ref(false)
+// The album as it plays: one copy of each song (the same song can sit in
+// the album folder and in a playlist folder), preferring the album folder.
+const albumQueue = computed(() => dedupeAlbumTracks(album.value?.tracks || []))
+const { songs: sourceSongs, editions, edition, selectEdition, releaseType, loading: sourceLoading } = useAlbumSource(route)
+const effectiveType = computed(() => effectiveReleaseType(releaseType.value, album.value?.release_type))
+// Labels describe versions, never provider ID suffixes.
+const editionOptions = computed(() => albumEditionOptions(editions.value, t))
+const { missing: missingSongs, loaded: targetLoaded, loading: targetLoading } = useAlbumDestination(sourceSongs)
+const albumComplete = computed(() => targetLoaded.value && !!sourceSongs.value?.length && !missingSongs.value.length)
+const dm = useDownloadManager()
+const ui = useUi()
+const submitting = ref(false)
+
+async function downloadAlbum() {
+  if (!targetLoaded.value || !missingSongs.value.length || submitting.value) return
+  submitting.value = true
+  try {
+    await dm.fromSongs(missingSongs.value, {
+      destination: 'album',
+      downloadMode: 'missing',
+    })
+  } catch (err) {
+    ui.toast(err?.response?.data?.detail || t('toast.actionFailed'), { kind: 'error' })
+  } finally {
+    submitting.value = false
+  }
+}
+
+function localTrack(song) {
+  return library.findTrack((song.artists || [])[0] || song.artist, song.name, song)
+}
+
+// The album folder already holds some, not all, of the album's tracks.
+const albumPartlyOwned = computed(() =>
+  targetLoaded.value &&
+  missingSongs.value.length > 0 &&
+  missingSongs.value.length < (sourceSongs.value?.length || 0)
+)
+const albumButtonLabel = computed(() =>
+  downloadReleaseLabel(effectiveType.value, t,
+    albumPartlyOwned.value ? 'partial' : 'none')
+)
+
+const rowMenus = {}
+function openRowMenu(event, song) {
+  rowMenus[song.song_id || song.url]?.openAt(event)
+}
+
+function rowMenu(song) {
+  const track = localTrack(song)
+  if (!track) return []
+  const items = actions.menuFor(track, {
+    list: albumQueue.value,
+    index: albumQueue.value.indexOf(track),
+    context: context.value,
+    hide: ['album'],
+  })
+  const addItems = playlistActions.addMenuItems([track])
+  if (addItems.length) items.splice(3, 0, { divider: true }, ...addItems)
+  return items
+}
 
 async function loadAlbum() {
   ready.value = false
@@ -141,35 +259,47 @@ async function loadAlbum() {
 
 onMounted(loadAlbum)
 watch(
-  () => [route.query.artist, route.query.title],
+  [() => route.query.artist, () => route.query.title],
   () => loadAlbum()
 )
 
-const album = computed(() =>
+const album = computed(() => selectedAlbumMetadata(
   library.findAlbum(
     String(route.query.artist || ''),
     String(route.query.title || '')
-  )
-)
+  ), sourceSongs.value?.[0]
+))
 
-function albumContext(item) {
+function albumContext(item, preserveOrigin = false) {
   return {
     type: 'album',
     title: item.title,
     subtitle: item.artist,
     cover: item.cover,
-    route: { name: 'Album', query: { artist: item.artist, title: item.title } },
+    route: {
+      name: 'Album',
+      query: {
+        artist: item.artist,
+        title: item.title,
+        ...(edition.value ? { edition: edition.value } : {}),
+        ...(preserveOrigin && route.query.playlist ? { playlist: route.query.playlist } : {}),
+        ...(preserveOrigin && route.query.playlistUrl ? { playlistUrl: route.query.playlistUrl } : {}),
+      },
+    },
   }
 }
 
-const context = computed(() => (album.value ? albumContext(album.value) : null))
+const context = computed(() => (album.value ? albumContext(album.value, true) : null))
 
 const facts = computed(() => {
   const a = album.value
-  const { hours, minutes } = splitLength(a.duration)
+  const songs = sourceSongs.value
+  const { hours, minutes } = splitLength(
+    songs ? songs.reduce((sum, song) => sum + (song.duration || 0), 0) : a.duration
+  )
   const formats = [...new Set(a.tracks.map((track) => track.format))].join(', ')
   return [
-    t('common.tracks', { count: a.tracks.length }),
+    t('common.tracks', { count: songs?.length || a.tracks.length }),
     hours
       ? t('common.lengthHours', { hours, minutes })
       : t('common.lengthMinutes', { minutes }),
@@ -189,7 +319,7 @@ const isThisPlaying = computed(() => {
 
 function togglePlay() {
   if (isThisPlaying.value) player.pause()
-  else actions.play(album.value.tracks, 0, context.value)
+  else actions.play(albumQueue.value, 0, context.value)
 }
 
 const moreByArtist = computed(() => {
@@ -205,11 +335,23 @@ const addToPlaylist = computed(() =>
   playlistActions.addMenuItems(album.value?.tracks || [])
 )
 
+const albumRef = computed(() => ({
+  name: album.value?.title || '',
+  artist: album.value?.artist || '',
+  // The matched Spotify edition, when the full tracklist came from Spotify.
+  url: editions.value.find((e) => e.id === edition.value)?.url || '',
+}))
+const findLookups = { spotify: API.spotifyLink, youtube: API.youtubeMusicLink }
+const findOpts = (missing) => ({
+  lookups: findLookups,
+  onMissing: () => ui.toast(t(missing), { kind: 'error' }),
+})
+
 const menu = computed(() => [
   {
     label: t('actions.playNext'),
     icon: 'play-next',
-    action: () => actions.playNext(album.value.tracks),
+    action: () => actions.playNext(albumQueue.value),
   },
   ...(addToPlaylist.value.length
     ? [{ divider: true }, ...addToPlaylist.value, { divider: true }]
@@ -219,14 +361,16 @@ const menu = computed(() => [
     icon: 'zip',
     action: () => actions.downloadZip(album.value.tracks),
   },
+  // The same album on the streaming services (its exact page, not a search).
   {
-    label: t('album.searchMore'),
-    icon: 'search',
-    action: () =>
-      router.push({
-        name: 'Search',
-        params: { query: `${album.value.artist} ${album.value.title}` },
-      }),
+    label: t('link.findSpotify'),
+    icon: 'spotify',
+    action: () => openAlbumOn('spotify', albumRef.value, findOpts('link.notOnSpotify')),
+  },
+  {
+    label: t('link.findYoutube'),
+    icon: 'youtube-music',
+    action: () => openAlbumOn('youtube', albumRef.value, findOpts('link.notOnYoutubeMusic')),
   },
   ...(album.value ? visibility.albumMenu(album.value) : []),
   { divider: true },

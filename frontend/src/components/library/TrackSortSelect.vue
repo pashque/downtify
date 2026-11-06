@@ -1,5 +1,5 @@
 <template>
-  <UiSelect
+  <EditionMenu
     :model-value="name"
     :options="options"
     :label="t('library.sortBy')"
@@ -12,7 +12,7 @@
 // Picks how a list of tracks is ordered. The column headers sort too, but
 // they're hidden on a phone and don't say which way "added" goes.
 import { computed } from 'vue'
-import UiSelect from '../ui/UiSelect.vue'
+import EditionMenu from './EditionMenu.vue'
 import { TRACK_SORTS, trackSortByName, trackSortName } from '/src/lib/library'
 import { useI18n } from '/src/i18n'
 

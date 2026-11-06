@@ -3,10 +3,14 @@
     <Transition name="now-playing">
       <div
         v-if="nowPlaying.isOpen.value && track"
-        class="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#07080b] text-white"
+        class="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#07080b] text-white [--np-side:clamp(240px,28vw,410px)]"
         role="dialog"
         aria-modal="true"
+        data-now-playing
         :aria-label="t('player.nowPlaying')"
+        @touchstart.passive="startDismissSwipe"
+        @touchend="endDismissSwipe"
+        @touchcancel="dismissStart = null"
       >
         <!-- Backdrop: the artwork, blown up and blurred. -->
         <div class="pointer-events-none absolute inset-0" aria-hidden="true">
@@ -29,11 +33,11 @@
           class="relative flex h-full flex-col px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:px-10 lg:pt-6 lg:pb-8"
         >
           <!-- Header -->
-          <header class="relative z-10 flex h-12 shrink-0 items-center gap-3">
+          <header class="np-edge-aligned relative z-10 flex h-12 shrink-0 touch-pan-x items-center gap-3" data-np-swipe-surface>
             <button
               ref="closeButton"
               type="button"
-              class="flex size-10 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+              class="flex size-10 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20 focus-visible:bg-white/20 focus-visible:outline-none"
               :aria-label="t('player.closeNowPlaying')"
               @click="nowPlaying.close()"
             >
@@ -42,27 +46,29 @@
             <component
               :is="contextRoute ? RouterLink : 'div'"
               :to="contextRoute || undefined"
+              data-np-context
               class="flex min-w-0 flex-col max-lg:flex-1 max-lg:items-center"
-              @click="contextRoute && nowPlaying.close()"
+              @click.prevent="contextRoute && navigate(contextRoute)"
             >
               <span class="eyebrow !text-white/55">{{ contextLabel }}</span>
-              <span class="max-w-full truncate text-sm font-semibold">{{
+              <span class="max-w-full truncate text-sm font-semibold" :class="contextRoute ? 'hover:underline' : ''">{{
                 contextTitle
               }}</span>
             </component>
             <div
-              class="ml-auto hidden gap-1 rounded-[12px] bg-white/8 p-1 lg:flex"
+              class="ml-auto hidden gap-1 rounded-[12px] bg-white/8 p-1 lg:flex xl:w-[var(--np-side)]"
               role="tablist"
+              data-np-tabs
             >
               <button
                 v-for="tab in panels"
                 :key="tab.id"
                 type="button"
                 role="tab"
-                :aria-selected="panel === tab.id"
-                class="flex h-9 items-center gap-2 rounded-[9px] px-3.5 text-[13px] transition-colors"
+                :aria-selected="tab.id === 'queue' && !isMobile ? desktopQueueVisible : panel === tab.id"
+                class="flex h-9 items-center justify-center gap-2 rounded-[9px] px-3.5 text-[13px] transition-colors xl:flex-1 xl:px-2"
                 :class="
-                  panel === tab.id
+                  (tab.id === 'queue' && !isMobile ? desktopQueueVisible : panel === tab.id)
                     ? 'bg-white/15 font-semibold text-white'
                     : 'font-medium text-white/65 hover:text-white'
                 "
@@ -71,13 +77,14 @@
                 <AppIcon :name="tab.icon" :size="16" />{{ tab.label }}
               </button>
             </div>
+            <div class="lg:hidden">
             <UiMenu
               :items="trackMenu"
               :label="t('common.more')"
-              class="lg:hidden"
             >
               <template #trigger>
                 <button
+                  ref="mobileMoreButton"
                   type="button"
                   class="flex size-10 items-center justify-center rounded-full hover:bg-white/10"
                   :aria-label="t('common.more')"
@@ -86,18 +93,20 @@
                 </button>
               </template>
             </UiMenu>
+            </div>
           </header>
 
           <!-- Body -->
           <div
-            class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-6 overflow-hidden py-4 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-stretch lg:gap-10 lg:py-4 xl:grid-cols-[auto_minmax(0,1fr)_minmax(220px,340px)] xl:gap-12"
+            class="np-edge-aligned np-body grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-6 overflow-hidden py-4 lg:items-stretch lg:gap-10 lg:py-4 xl:gap-12"
+            :data-queue-visible="desktopQueueVisible" :data-central-panel="!!panel"
           >
             <!-- Artwork + title (hidden on phones while a panel is open) -->
             <div
               class="now-playing-stage flex h-full min-h-0 w-full min-w-0 max-w-full flex-col justify-center gap-4 overflow-hidden lg:gap-5"
               :class="mobilePanel ? 'max-lg:hidden' : ''"
             >
-              <div class="now-playing-cover mx-auto">
+              <div class="now-playing-cover mx-auto touch-pan-x" data-np-swipe-surface>
                 <CoverArt
                   :src="track.hasCover ? track.cover : ''"
                   :name="track.album || track.title"
@@ -105,11 +114,11 @@
                   :letter-size="140"
                   :icon-size="72"
                   class="aspect-square w-full min-h-0 min-w-0 transition-transform duration-500 ease-out-soft"
-                  :class="player.isPlaying.value ? 'scale-100' : 'scale-[0.94]'"
+                  :class="player.isPlaying.value ? 'scale-100' : 'scale-[0.94] lg:scale-100'"
                 />
               </div>
               <div
-                class="flex w-full min-w-0 shrink-0 items-end justify-between gap-4"
+                class="flex w-full min-w-0 shrink-0 items-end justify-between gap-4" data-np-undercover
               >
                 <div class="min-w-0 flex-1">
                   <div class="flex min-w-0 items-center gap-2.5">
@@ -120,38 +129,21 @@
                     </h2>
                     <ExplicitBadge v-if="track.explicit" tone="onDark" />
                   </div>
-                  <RouterLink
-                    v-if="track.albumArtist && !track.isPodcast"
-                    :to="{ name: 'Artist', query: { name: track.albumArtist } }"
-                    class="mt-1 block truncate text-base text-white/70 hover:text-white hover:underline"
-                    @click="nowPlaying.close()"
-                    >{{ track.artist }}</RouterLink
-                  >
-                  <p v-else class="mt-1 truncate text-base text-white/70">
-                    {{ track.artist }}
-                  </p>
+                  <div class="mt-1 truncate text-base text-white/70">
+                    <RouterLink v-if="artistRoute" :to="artistRoute" data-np-artist
+                      class="hover:text-white hover:underline" @click.prevent="navigate(artistRoute)">{{ track.artist }}</RouterLink>
+                    <span v-else>{{ track.artist }}</span>
+                    <template v-if="albumRoute"><span> · </span><RouterLink :to="albumRoute" data-np-cover-album
+                      class="hover:text-white hover:underline" @click.prevent="navigate(albumRoute)">{{ track.album }}</RouterLink></template>
+                  </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-1">
-                  <LikeButton
-                    v-if="!track?.isPodcast && !track?.stream"
-                    :file="track.file"
-                    size="lg"
-                  />
-                  <UiMenu
-                    :items="trackMenu"
-                    :label="t('common.more')"
-                    class="hidden lg:inline-flex"
-                  >
-                    <template #trigger>
-                      <button
-                        type="button"
-                        class="flex size-10 items-center justify-center rounded-full hover:bg-white/10"
-                        :aria-label="t('common.more')"
-                      >
-                        <AppIcon name="more" :size="22" />
-                      </button>
-                    </template>
-                  </UiMenu>
+                <!-- Phones: format and heart right of the title block. On
+                     desktop the bottom bar carries them, like the mini player. -->
+                <div class="flex shrink-0 items-center gap-1 lg:hidden" data-np-cover-meta>
+                  <span v-if="track.format" data-np-cover-format class="shrink-0 rounded-md border border-white/20 px-1.5 py-0.5 text-[11px] leading-none font-semibold tracking-wide text-white/75">{{ track.format }}</span>
+                  <span v-if="!track?.isPodcast && !track?.stream" class="contents" data-np-cover-like>
+                    <LikeButton :file="track.file" size="lg" />
+                  </span>
                 </div>
               </div>
               <p
@@ -164,22 +156,26 @@
 
             <!-- Main panel -->
             <div
-              class="min-h-0 lg:h-full"
+              v-if="panel !== 'queue' && (panel || (!isMobile && !desktopQueueVisible))"
+              data-np-central
+              class="min-h-0 overflow-hidden lg:h-full"
               :class="mobilePanel ? '' : 'max-lg:hidden'"
             >
               <LyricsPanel v-if="panel === 'lyrics'" :compact="isMobile" />
-              <UpNextPanel v-else-if="panel === 'queue'" />
-              <TrackDetails v-else-if="panel === 'details'" class="lg:pt-10" />
-              <EqualizerPanel
-                v-else-if="panel === 'equalizer'"
-                :palette="palette"
-              />
+              <!-- Details and equalizer start level with the cover's top. -->
+              <div v-else-if="panel === 'details' || panel === 'equalizer'" class="h-full lg:flex lg:flex-col lg:justify-center">
+                <div class="now-playing-aligned min-h-0" data-np-aligned>
+                  <TrackDetails v-if="panel === 'details'" />
+                  <EqualizerPanel v-else :palette="palette" class="lg:!justify-start" />
+                </div>
+              </div>
             </div>
 
-            <!-- Up next always visible on wide screens -->
+            <!-- One frameless queue: right-hand slot on desktop, panel on phones. -->
             <aside
-              v-if="panel !== 'queue'"
-              class="hidden h-full min-h-0 max-h-full rounded-panel border border-white/10 bg-white/6 p-3 backdrop-blur-xl xl:block"
+              v-if="isMobile ? panel === 'queue' : desktopQueueVisible"
+              data-np-queue
+              class="h-full min-h-0 max-h-full overflow-hidden"
             >
               <UpNextPanel />
             </aside>
@@ -192,7 +188,8 @@
                 formatDuration(scrub ?? player.currentTime.value)
               }}</span>
               <WaveSeekBar
-                class="flex-1"
+                data-np-seek
+                class="min-w-0 flex-1"
                 :model-value="scrub ?? player.currentTime.value"
                 :max="player.duration.value || 1"
                 :label="t('player.seek')"
@@ -207,20 +204,28 @@
               }}</span>
             </div>
 
-            <div class="mt-3 flex items-center lg:mt-4">
-              <div class="hidden flex-1 items-center gap-2 lg:flex">
-                <span
-                  v-if="track.format"
-                  class="rounded-md border border-white/20 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/75"
-                  >{{ track.format }}</span
-                >
-                <span v-if="track.size" class="text-xs text-white/55">
-                  {{ formatBytes(track.size) }}
-                </span>
+            <!-- The same bar as the mini player: title block with format and
+                 heart, transport in the middle, panels/volume/collapse right. -->
+            <div class="np-edge-aligned mt-3 flex items-center lg:mt-4" data-np-bar>
+              <div class="hidden min-w-0 flex-1 basis-0 items-center gap-3 lg:flex">
+                <div data-np-nowline class="flex min-w-0 flex-1 flex-col">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="truncate text-sm font-semibold text-white">{{ track.title }}</span>
+                    <ExplicitBadge v-if="track.explicit" tone="onDark" />
+                  </div>
+                  <div class="truncate text-xs text-white/65">
+                    <RouterLink v-if="artistRoute" :to="artistRoute" data-np-artist
+                      class="hover:text-white hover:underline" @click.prevent="navigate(artistRoute)">{{ track.artist }}</RouterLink>
+                    <span v-else>{{ track.artist }}</span>
+                    <template v-if="albumRoute"><span> · </span><RouterLink :to="albumRoute" data-np-bottom-album
+                      class="hover:text-white hover:underline" @click.prevent="navigate(albumRoute)">{{ track.album }}</RouterLink></template>
+                  </div>
+                </div>
               </div>
 
               <div
-                class="flex flex-1 items-center justify-between lg:flex-none lg:justify-center lg:gap-7"
+                class="flex flex-1 items-center justify-between lg:flex-none lg:justify-center lg:gap-1 xl:gap-3 2xl:gap-7"
+                data-np-transport
               >
                 <button
                   v-if="track?.isPodcast"
@@ -236,7 +241,7 @@
                 <button
                   v-if="similarArtist && similarTitle"
                   type="button"
-                  class="flex size-11 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10"
+                  class="flex size-11 items-center lg:max-xl:hidden justify-center rounded-full text-white/80 transition-colors hover:bg-white/10"
                   :aria-label="t('similar.findSimilar')"
                   @click="goSimilar"
                 >
@@ -319,11 +324,21 @@
                      while queued it spins instead), a downloaded track
                      shows a static check that does nothing. -->
                 <button
-                  v-if="showPlayerDownload"
+                  v-if="isMobile"
+                  type="button"
+                  data-np-mobile-queue
+                  class="flex size-11 items-center justify-center transition-colors hover:text-white"
+                  :class="panel === 'queue' ? 'text-accent' : 'text-white/80'"
+                  :aria-label="t('player.upNext')"
+                  :aria-pressed="panel === 'queue'"
+                  @click="toggleMobilePanel('queue')"
+                ><AppIcon name="queue" :size="22" /></button>
+                <button
+                  v-else-if="showPlayerDownload"
                   type="button"
                   class="flex size-11 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 disabled:opacity-50"
                   :aria-label="t('actions.downloadItem', { name: track.title })"
-                  :disabled="downloadBusy"
+                  :disabled="downloadBusy || !pendingSong"
                   @click="downloadCurrent"
                 >
                   <AppIcon
@@ -332,17 +347,15 @@
                     :class="downloadBusy ? 'animate-spin' : ''"
                   />
                 </button>
+                <!-- The heart sits where the library check used to be. -->
                 <span
-                  v-else-if="showDownloadedCheck"
-                  class="flex size-11 items-center justify-center rounded-full text-accent"
-                  :title="t('search.inLibrary')"
-                  aria-hidden="true"
-                >
-                  <AppIcon name="check" :size="22" />
-                </span>
+                  v-else-if="!track?.isPodcast && !track?.stream"
+                  class="flex size-11 items-center justify-center"
+                  data-np-bar-like
+                ><LikeButton :file="track.file" size="lg" /></span>
               </div>
 
-              <div class="hidden flex-1 items-center justify-end gap-2 lg:flex">
+              <div class="hidden min-w-0 flex-1 basis-0 items-center justify-end gap-1 lg:flex" data-np-bar-right>
                 <UiMenu
                   v-if="track?.isPodcast"
                   :items="speedMenu"
@@ -359,94 +372,55 @@
                     </button>
                   </template>
                 </UiMenu>
-                <UiMenu :items="sleepMenu" :label="t('player.sleepTimer')">
-                  <template #trigger>
-                    <button
-                      type="button"
-                      class="flex h-10 items-center gap-2 rounded-full px-3 text-xs font-semibold transition-colors hover:bg-white/10"
-                      :class="
-                        player.sleepAt.value ? 'text-accent' : 'text-white/75'
-                      "
-                      :aria-label="t('player.sleepTimer')"
-                    >
-                      <AppIcon name="timer" :size="20" />
-                      <span v-if="sleepLabel" class="tabular">{{
-                        sleepLabel
-                      }}</span>
-                    </button>
-                  </template>
-                </UiMenu>
+                <!-- Same row as the mini player: playing bars, elapsed / total,
+                     format, volume. -->
+                <EqBars v-if="player.isPlaying.value" :size="12" class="shrink-0" />
+                <span data-np-clock class="tabular mx-1 inline-grid shrink-0 text-xs whitespace-nowrap text-white/65">
+                  <span class="invisible col-start-1 row-start-1" aria-hidden="true">{{ clockSizer }}</span>
+                  <span class="col-start-1 row-start-1 text-right"
+                    >{{ formatDuration(player.currentTime.value) }} / {{ formatDuration(player.duration.value) }}</span
+                  >
+                </span>
+                <span v-if="track.format" data-np-format class="mr-1 shrink-0 rounded-md border border-white/20 px-1.5 py-0.5 text-[11px] leading-none font-semibold tracking-wide text-white/75">{{ track.format }}</span>
                 <VolumeControl
-                  width="w-28"
+                  button-size="md"
+                  :icon-px="22"
+                  width="hidden w-24 2xl:flex"
                   track-class="bg-white/20"
                   fill-class="bg-white"
                   thumb-class="bg-white"
-                  class="text-white [&_button]:text-white/80 [&_button:hover]:bg-white/10"
+                  class="shrink-0 text-white [&_button]:shrink-0 [&_button]:text-white/80 [&_button:hover]:bg-white/10"
                 />
+                <!-- Same spot as the mini player's expand arrows. -->
+                <button
+                  type="button"
+                  data-np-collapse
+                  class="flex size-10 shrink-0 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10"
+                  :aria-label="t('player.closeNowPlaying')"
+                  @click="nowPlaying.close()"
+                ><AppIcon name="collapse" :size="20" /></button>
+                <UiMenu :items="trackMenu" :label="t('common.more')" data-np-more>
+                  <template #trigger>
+                    <button
+                      ref="desktopMoreButton"
+                      type="button"
+                      class="flex size-10 shrink-0 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10"
+                      :aria-label="t('common.more')"
+                    >
+                      <AppIcon name="more" :size="20" />
+                    </button>
+                  </template>
+                </UiMenu>
               </div>
             </div>
 
-            <!-- Phone extras -->
-            <div class="mt-4 flex items-center justify-between lg:hidden">
-              <div class="flex items-center gap-1">
-                <UiMenu
-                  v-if="track?.isPodcast"
-                  :items="speedMenu"
-                  :label="t('podcasts.playbackSpeed')"
-                  align="start"
-                >
-                  <template #trigger>
-                    <button
-                      type="button"
-                      class="flex h-10 items-center gap-2 rounded-full px-3 text-xs font-semibold text-white/75"
-                      :aria-label="t('podcasts.playbackSpeed')"
-                    >
-                      <AppIcon name="gauge" :size="20" />
-                      <span class="tabular">{{ speedLabel }}</span>
-                    </button>
-                  </template>
-                </UiMenu>
-                <UiMenu
-                  :items="sleepMenu"
-                  :label="t('player.sleepTimer')"
-                  align="start"
-                >
-                  <template #trigger>
-                    <button
-                      type="button"
-                      class="flex h-10 items-center gap-2 rounded-full px-3 text-xs font-semibold"
-                      :class="
-                        player.sleepAt.value ? 'text-accent' : 'text-white/75'
-                      "
-                      :aria-label="t('player.sleepTimer')"
-                    >
-                      <AppIcon name="timer" :size="20" />
-                      <span v-if="sleepLabel" class="tabular">{{
-                        sleepLabel
-                      }}</span>
-                    </button>
-                  </template>
-                </UiMenu>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  v-for="tab in panels"
-                  :key="tab.id"
-                  type="button"
-                  class="flex h-10 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold transition-colors"
-                  :class="
-                    panel === tab.id && mobilePanel
-                      ? 'bg-white text-[#0b0c0e]'
-                      : 'bg-white/12 text-white'
-                  "
-                  :aria-pressed="panel === tab.id && mobilePanel"
-                  @click="toggleMobilePanel(tab.id)"
-                >
-                  <AppIcon :name="tab.icon" :size="16" />
-                  <span class="max-xs:sr-only">{{ tab.label }}</span>
-                </button>
-              </div>
-            </div>
+            <!-- Secondary native popups share the top menu's anchor. -->
+            <UiMenu ref="mobileSleepMenu" :items="sleepMenu" :label="t('player.sleepTimer')">
+              <template #trigger><span class="hidden" aria-hidden="true" /></template>
+            </UiMenu>
+            <UiMenu v-if="isMobile && track?.isPodcast" ref="mobileSpeedMenu" :items="speedMenu" :label="t('podcasts.playbackSpeed')">
+              <template #trigger><span class="hidden" aria-hidden="true" /></template>
+            </UiMenu>
           </footer>
         </div>
       </div>
@@ -475,10 +449,16 @@ import { useLibrary } from '/src/model/library'
 import { useUi } from '/src/model/ui'
 import { usePlayerPrefs } from '/src/model/playerPrefs'
 import { useNowPlaying } from '/src/model/ui'
-import { formatBytes, formatDuration, hueFor } from '/src/lib/format'
-import { availablePanels, defaultPanel, requestedPanel } from '/src/lib/panels'
+import { formatDuration, hueFor, widestClock } from '/src/lib/format'
+import EqBars from '../ui/EqBars.vue'
+import { availablePanels, requestedPanel } from '/src/lib/panels'
 import { useCoverPalette } from '/src/model/coverPalette'
 import { saveName } from '/src/lib/paths'
+import { openTrackOnSpotify } from '/src/lib/sourceLinks'
+// Static on purpose: a dynamic import of the API client breaks the build.
+import API from '/src/model/api'
+import { playerArtistRoute, playerContextRoute, playerAlbumRoute } from '/src/lib/playerNavigation'
+import { dismissPlayerSwipe } from '/src/lib/playerSwipe'
 import { useI18n } from '/src/i18n'
 
 const player = usePlayer()
@@ -495,8 +475,41 @@ const isMobile = useMediaQuery('(max-width: 1023px)')
 const now = useNow({ interval: 15000 })
 const scrub = ref(null)
 const closeButton = ref(null)
+const mobileMoreButton = ref(null)
+const mobileSleepMenu = ref(null)
+const mobileSpeedMenu = ref(null)
+const desktopMoreButton = ref(null)
+// Secondary menus open where the ⋯ that offered them sits (top on
+// phones, bottom bar on desktop - UiMenu flips it upwards there).
+async function openMobileMenu(menu) {
+  const button = isMobile.value ? mobileMoreButton.value : desktopMoreButton.value
+  const rect = button?.getBoundingClientRect()
+  if (!rect) return
+  await nextTick()
+  menu?.openAt({ preventDefault() {}, clientX: rect.right - 208, clientY: rect.bottom })
+}
+let dismissStart = null
+function startDismissSwipe(event) {
+  dismissStart = null
+  if (!isMobile.value || event.touches.length !== 1 ||
+      !event.target.closest('[data-np-swipe-surface]')) return
+  const touch = event.touches[0]
+  dismissStart = { x: touch.clientX, y: touch.clientY }
+}
+function endDismissSwipe(event) {
+  const touch = event.changedTouches?.[0]
+  const end = touch ? { x: touch.clientX, y: touch.clientY } : null
+  const dismiss = dismissPlayerSwipe(dismissStart, end, isMobile.value)
+  dismissStart = null
+  if (dismiss) {
+    event.preventDefault()
+    nowPlaying.close()
+  }
+}
 
 const track = computed(() => player.currentTrack.value)
+const artistRoute = computed(() => playerArtistRoute(track.value))
+const albumRoute = computed(() => playerAlbumRoute(track.value))
 
 // Tracks like this one (podcasts have none): left of shuffle.
 const similarArtist = computed(() => {
@@ -550,20 +563,27 @@ const requested = computed(() =>
     panels.value.map((tab) => tab.id)
   )
 )
-const panel = computed(
-  () =>
-    requested.value ||
-    defaultPanel({
-      lyrics: showLyrics.value,
-      isPodcast: track.value?.isPodcast,
-      isStream: track.value?.stream,
-    })
-)
+// Nothing in the middle by default: lyrics, queue etc. only when picked.
+const desktopQueueVisible = ref(true)
+const panel = computed(() => !isMobile.value && requested.value === 'queue' ? '' : (requested.value || ''))
 const mobilePanel = computed(() => isMobile.value && !!requested.value)
 
 function setPanel(id) {
+  if (id === 'queue' && !isMobile.value) {
+    desktopQueueVisible.value = !desktopQueueVisible.value
+    return
+  }
+  // Picking the open tab again closes it.
+  if (requested.value === id) {
+    const { panel: _panel, ...query } = route.query
+    router.replace({ query })
+    return
+  }
   router.replace({ query: { ...route.query, panel: id } })
 }
+
+const clockSizer = computed(() => widestClock(player.duration.value))
+const hasPanel = (id) => panels.value.some((tab) => tab.id === id)
 
 function toggleMobilePanel(id) {
   if (mobilePanel.value && panel.value === id) {
@@ -582,7 +602,7 @@ const contextLabel = computed(() => {
 const contextTitle = computed(
   () => context.value?.title || track.value?.album || t('player.queue')
 )
-const contextRoute = computed(() => context.value?.route || null)
+const contextRoute = computed(() => playerContextRoute(context.value, track.value))
 
 const repeatLabel = computed(
   () =>
@@ -652,6 +672,16 @@ const trackMenu = computed(() => {
       action: () =>
         navigate({ name: 'Artist', query: { name: tr.albumArtist } }),
     },
+    // The track's own Spotify page (found on its album), never a search.
+    {
+      label: t('link.findSpotify'),
+      icon: 'spotify',
+      hidden: !tr.album || tr.isPodcast || !!tr.stream,
+      action: () => openTrackOnSpotify(tr, {
+        lookup: API.spotifyLink,
+        onMissing: () => ui.toast(t('link.notOnSpotify'), { kind: 'error' }),
+      }),
+    },
     {
       label: t('library.saveToDevice'),
       icon: 'download',
@@ -659,18 +689,38 @@ const trackMenu = computed(() => {
       action: () => saveFile(tr),
     },
     { divider: true },
-    {
-      label: t('player.details'),
-      icon: 'info',
-      action: () =>
-        isMobile.value ? toggleMobilePanel('details') : setPanel('details'),
-    },
+    ...(isMobile.value ? [
+      ...panels.value.filter((tab) => tab.id !== 'queue').map((tab) => ({
+        label: tab.label, icon: tab.icon, checked: panel.value === tab.id,
+        action: () => toggleMobilePanel(tab.id),
+      })),
+      { label: t('player.sleepTimer'), icon: 'timer', checked: !!player.sleepAt.value,
+        action: () => openMobileMenu(mobileSleepMenu.value) },
+      { label: t('podcasts.playbackSpeed'), icon: 'gauge', hidden: !tr.isPodcast,
+        action: () => openMobileMenu(mobileSpeedMenu.value) },
+      { label: t('actions.downloadItem', { name: tr.title }), icon: 'download',
+        hidden: !showPlayerDownload.value, disabled: downloadBusy.value,
+        action: downloadCurrent },
+    ] : [
+      { label: t('player.lyrics'), icon: 'lyrics', hidden: !hasPanel('lyrics'),
+        checked: panel.value === 'lyrics', action: () => setPanel('lyrics') },
+      { label: t('player.upNext'), icon: 'queue', hidden: !hasPanel('queue'),
+        checked: desktopQueueVisible.value, action: () => setPanel('queue') },
+      { label: t('player.details'), icon: 'info', hidden: !hasPanel('details'),
+        checked: panel.value === 'details', action: () => setPanel('details') },
+      { label: t('player.equalizer'), icon: 'equalizer', hidden: !hasPanel('equalizer'),
+        checked: panel.value === 'equalizer', action: () => setPanel('equalizer') },
+      { label: sleepLabel.value ? `${t('player.sleepTimer')} · ${sleepLabel.value}` : t('player.sleepTimer'),
+        icon: 'timer', checked: !!player.sleepAt.value,
+        action: () => openMobileMenu(mobileSleepMenu.value) },
+    ]),
   ]
 })
 
 function navigate(to) {
-  // Leave the overlay first so the new page isn't opened "under" it.
-  router.replace({ query: {} }).then(() => router.push(to))
+  // One navigation drops np/panel and opens the target. Calling close()
+  // here would race a history.back() against the link destination.
+  return router.push(to)
 }
 
 function saveFile(tr) {
@@ -687,19 +737,11 @@ function saveFile(tr) {
 const streamDownloaded = computed(
   () =>
     !!track.value?.stream &&
-    library.hasSong(track.value.artist, track.value.title)
+    library.hasSong(track.value.artist, track.value.title, track.value)
 )
 
 const showPlayerDownload = computed(
   () => !!track.value?.stream && !streamDownloaded.value
-)
-// A downloaded track shows a static check where the download button
-// was; deleting happens from the library rows.
-const showDownloadedCheck = computed(
-  () =>
-    !!track.value &&
-    !track.value.isPodcast &&
-    (!track.value.stream || streamDownloaded.value)
 )
 
 // The playing stream as a downloadable song: the watch URL is the
@@ -770,3 +812,22 @@ onBeforeUnmount(() => {
   document.documentElement.style.overflow = ''
 })
 </script>
+
+<style scoped>
+.now-playing-play {
+  width: clamp(3rem, 7vh, 3.75rem);
+  height: clamp(3rem, 7vh, 3.75rem);
+}
+@media (min-width: 1024px) {
+  .np-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .np-body[data-queue-visible="true"][data-central-panel="false"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .np-body[data-queue-visible="true"][data-central-panel="true"] {
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) minmax(220px, var(--np-side));
+  }
+  .np-body[data-queue-visible="true"][data-central-panel="true"] .now-playing-stage {
+    width: 100%;
+  }
+}
+</style>

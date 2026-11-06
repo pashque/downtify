@@ -100,7 +100,7 @@ _SAME_SONG_TAG = re.compile(
 )
 _FEAT_TAIL = re.compile(r'\s(feat|ft)\.?\s.*$')
 _REMASTER_TAIL = re.compile(r'\s-\s[^-]*remaster[^-]*$')
-_ARTIST_SPLIT = re.compile(r',|;| & ')
+_ARTIST_SPLIT = re.compile(r';')
 
 #: Top-level folder podcast episodes live under (see
 #: ``downtify.podcasts``). Excluded from the library scan below, so
@@ -566,11 +566,30 @@ def song_key(artist: str, title: str) -> str:
         folded = _SAME_SONG_TAG.sub(' ', folded)
         folded = _FEAT_TAIL.sub(' ', folded)
         folded = _REMASTER_TAIL.sub(' ', folded)
-        folded = ''.join(ch if ch.isalnum() else ' ' for ch in folded)
-        return ' '.join(folded.split())
+        symbolic = folded
+        folded = ''.join(ch if ch.isalnum() or ch == '+' else ' ' for ch in folded)
+        return ' '.join(folded.split()) or ' '.join(symbolic.split())
 
-    first = _ARTIST_SPLIT.split(str(artist or ''), maxsplit=1)[0].strip()
-    return f'{clean(first)}|{clean(title)}'
+    first = str(artist or '').split(';', 1)[0]
+    return f'{artist_identity_key(first)}|{clean(title)}'
+
+
+def artist_identity_key(name: str) -> str:
+    """Shared primary-artist identity: NFKC, lower, whitespace only.
+
+    Punctuation, accents and Unicode casefold expansions are identities,
+    not cosmetic noise (!!!, +++, A/B and A&B must remain distinct).
+    """
+    return ' '.join(unicodedata.normalize('NFKC', str(name or '')).lower().split())
+
+
+def primary_artist_of(entry: dict[str, Any]) -> str:
+    """Prefer structured credits; only semicolons delimit legacy strings."""
+    artists = entry.get('artists')
+    if isinstance(artists, list) and artists:
+        first = artists[0]
+        return str(first.get('name') or '').strip() if isinstance(first, dict) else str(first or '').strip()
+    return str(entry.get('artist') or '').split(';', 1)[0].strip()
 
 
 _VARIOUS_ARTISTS = frozenset({'various artists', 'various'})
@@ -586,6 +605,9 @@ def album_artist_of(entry: dict[str, Any]) -> str:
     album_artist = str(entry.get('album_artist') or '').strip()
     if album_artist and album_artist.casefold() not in _VARIOUS_ARTISTS:
         return album_artist
+    artists = entry.get('artists')
+    if isinstance(artists, list) and artists:
+        return str(artists[0] or '').strip()
     return str(entry.get('artist') or '').split(';')[0].strip()
 
 
@@ -667,37 +689,94 @@ def lookup_library_songs(
     page doesn't offer someone else's file as "already downloaded".
     """
 
-    wanted: list[str] = []
-    seen_keys: set[str] = set()
-    for raw in songs[:LOOKUP_SONG_MAX]:
-        if not isinstance(raw, dict):
-            continue
-        artist = str(raw.get('artist') or '').strip()
-        artists = raw.get('artists')
-        if not artist and isinstance(artists, list) and artists:
-            artist = str(artists[0] or '').strip()
-        title = str(raw.get('title') or raw.get('name') or '').strip()
-        key = song_key(artist, title)
-        if key == '|' or key in seen_keys:
-            continue
-        seen_keys.add(key)
-        wanted.append(key)
-    if not wanted:
+    from .track_index import normalize_spotify_track_id
+
+    def identity(row: dict[str, Any]) -> tuple[str, str]:
+        artist = primary_artist_of(row)
+        title = str(row.get('title') or row.get('name') or '').strip()
+        # A tuple avoids delimiter collisions for literal bars in both names.
+        return artist_identity_key(artist), song_key('', title)[1:]
+
+    def source(row: dict[str, Any]) -> str:
+        value = str(row.get('source') or '')
+        return 'youtube' if value == 'youtube_music' else value
+
+    def spotify_id(row: dict[str, Any]) -> Optional[str]:
+        # Do not interpret another provider's opaque song_id as Spotify.
+        if source(row) not in {'', 'spotify'}:
+            return None
+        return normalize_spotify_track_id(row)
+
+    requests = [raw for raw in songs[:LOOKUP_SONG_MAX]
+                if isinstance(raw, dict) and (spotify_id(raw) or all(identity(raw)))]
+    if not requests:
         return []
-    pending = set(wanted)
+    entries = listing_for_request(ctx, allowed_keys=allowed_keys)
+    index = getattr(ctx, 'track_index', None)
+    identities = index.identities_for_files({str(e.get('file') or '') for e in entries}) if index else {}
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    by_spotify_id: dict[str, list[dict[str, Any]]] = {}
+    from .recording_equivalence import registry
+    for entry in entries:
+        row = dict(entry)
+        ids = set(identities.get(str(row.get('file') or ''), set()))
+        stored_id = spotify_id(row)
+        if stored_id:
+            ids.add(stored_id)
+        ids = {equivalent for tid in ids for equivalent in registry.equivalent_tracks(tid)}
+        if ids:
+            row['spotify_track_ids'] = sorted(ids)
+            if len(ids) == 1:
+                row['song_id'] = next(iter(ids))
+            for track_id in ids:
+                by_spotify_id.setdefault(track_id, []).append(row)
+        buckets.setdefault(identity(row), []).append(row)
+
     found: list[dict[str, Any]] = []
-    found_keys: set[str] = set()
-    for entry in listing_for_request(ctx, allowed_keys=allowed_keys):
-        key = song_key(
-            str(entry.get('artist') or ''),
-            str(entry.get('title') or ''),
-        )
-        if key not in pending or key in found_keys:
-            continue
-        found_keys.add(key)
-        found.append(entry)
-        if len(found_keys) == len(pending):
-            break
+    files: set[str] = set()
+    for raw in requests:
+        requested_id = spotify_id(raw)
+        # Recording identity precedes mutable display metadata, including
+        # aliases, retitled tracks and corrected credits.
+        exact = by_spotify_id.get(requested_id, []) if requested_id else []
+        candidates = list(exact)
+        fallback_rows = [] if exact or not all(identity(raw)) else buckets.get(identity(raw), [])
+        for row in fallback_rows:
+            requested_artists = raw.get('artist_ids') or []
+            stored_artists = row.get('artist_ids') or []
+            if source(raw) == source(row) and requested_artists and stored_artists and requested_artists[0] and stored_artists[0] and requested_artists[0] != stored_artists[0]:
+                continue
+            ids = set(row.get('spotify_track_ids') or [])
+            if requested_id and ids and requested_id not in ids:
+                continue
+            if requested_id and requested_id in ids:
+                candidates.append(row)
+                continue
+            album = str(raw.get('album_name') or raw.get('album') or '').strip()
+            stored_album = str(row.get('album') or '').strip()
+            if album and stored_album and artist_identity_key(album) != artist_identity_key(stored_album):
+                continue
+            duration = float(raw.get('duration') or 0)
+            stored_duration = float(row.get('duration') or 0)
+            if duration and stored_duration and abs(duration - stored_duration) > 5:
+                continue
+            candidates.append(row)
+        exact = [r for r in candidates if requested_id and requested_id in r.get('spotify_track_ids', [])]
+        if exact:
+            candidates = exact
+        else:
+            # Multiple releases/known recordings are not an unambiguous fallback.
+            fingerprints = {(artist_identity_key(r.get('album') or ''), tuple(r.get('spotify_track_ids') or [])) for r in candidates}
+            if len(fingerprints) > 1:
+                continue
+        if candidates:
+            row = candidates[0]
+            if requested_id and requested_id in row.get('spotify_track_ids', []):
+                row = dict(row, song_id=requested_id)
+            file = str(row.get('file') or '')
+            if file not in files:
+                files.add(file)
+                found.append(row)
     return found
 
 
@@ -728,8 +807,11 @@ def library_album_index(
             size += int(track.get('size') or 0)
             if not cover_file and track.get('has_cover'):
                 cover_file = str(track.get('file') or '')
+        release_types = {str(track.get('release_type') or '').strip().lower()
+                         for track in tracks} & {'album', 'single', 'ep', 'compilation'}
         row = {
             'title': bucket['title'],
+            'release_type': next(iter(release_types)) if len(release_types) == 1 else '',
             'artist': bucket['artist'],
             'year': bucket['year'],
             'added': int(bucket['added'] or 0),

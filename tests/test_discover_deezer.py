@@ -109,7 +109,7 @@ def test_owned_albums_are_skipped_and_seeds_get_two_each():
             ]
         },
         {},
-        {album_key('Mine', 'Owned (Deluxe Edition)')},
+        {album_key('Mine', 'Owned')},
         set(),
     )
     more = picked['more_albums']
@@ -299,7 +299,7 @@ def _spotify_kw(related, searches, finder, **kw):
 def test_spotify_albums_matched_to_deezer_or_kept_as_spotify(tmp_path):
     store, related, searches = _spotify_setup(tmp_path)
     finder = _Finder({
-        'New Record (Remastered)': [_match_row('dz1', 'New Record', 'New')]
+        'New Record (Remastered)': [_match_row('dz1', 'New Record (Remastered)', 'New')]
     })
     library = [{'name': 'Mine', 'tracks': 3}]
 
@@ -331,7 +331,7 @@ def test_albums_already_shown_are_not_matched(tmp_path):
         store,
         library,
         shown=[
-            album_key('New', 'New Record'),
+            album_key('New', 'New Record (Remastered)'),
             album_key('Mine', 'Mine Classic'),
         ],
         **_spotify_kw(related, searches, finder),
@@ -345,7 +345,7 @@ def test_albums_already_shown_are_not_matched(tmp_path):
 def test_matches_are_cached_found_longer_than_missing(tmp_path):
     store, related, searches = _spotify_setup(tmp_path)
     finder = _Finder({
-        'New Record (Remastered)': [_match_row('dz1', 'New Record', 'New')]
+        'New Record (Remastered)': [_match_row('dz1', 'New Record (Remastered)', 'New')]
     })
     library = [{'name': 'Mine', 'tracks': 3}]
 

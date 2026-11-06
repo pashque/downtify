@@ -80,10 +80,10 @@ def _entry(file: str, **kw: Any) -> dict[str, Any]:
 
 
 def test_split_artists_matches_the_web_app():
-    assert split_artists('A, B') == ['A', 'B']
+    assert split_artists('A, B') == ['A, B']
     assert split_artists('A; B, C') == ['A', 'B, C']
     assert split_artists('AC/DC') == ['AC/DC']
-    assert split_artists('A / B') == ['A', 'B']
+    assert split_artists('A / B') == ['A / B']
     assert split_artists('') == []
 
 

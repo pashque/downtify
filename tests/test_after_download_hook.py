@@ -100,7 +100,7 @@ def test_a_song_found_only_after_enrichment_does_not_call_the_hook_either(
         Downloader, '_can_resolve_path_early', lambda *a: False
     )
     monkeypatch.setattr(
-        Downloader, '_target_lock', lambda self, song: contextlib.nullcontext()
+        Downloader, '_target_lock', lambda self, song, subdir=None: contextlib.nullcontext()
     )
     monkeypatch.setattr(
         Downloader,
@@ -122,7 +122,7 @@ def test_a_new_file_found_under_the_lock_calls_the_hook(tmp_path, monkeypatch):
         Downloader, '_can_resolve_path_early', lambda *a: False
     )
     monkeypatch.setattr(
-        Downloader, '_target_lock', lambda self, song: contextlib.nullcontext()
+        Downloader, '_target_lock', lambda self, song, subdir=None: contextlib.nullcontext()
     )
     monkeypatch.setattr(
         Downloader, 'find_existing_download', lambda self, song, subdir: None

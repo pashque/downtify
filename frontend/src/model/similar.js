@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 
 import API from '/src/model/api'
 import { useLibrary } from '/src/model/library'
+import { rowKey as songKey } from '/src/model/streamResolve'
 
 const artist = ref('')
 const track = ref('')
@@ -16,22 +17,6 @@ const searched = ref(false)
 const hasMore = ref(true)
 const loadingMore = ref(false)
 let serial = 0
-
-function songKey(item) {
-  const id = String(item?.song_id || '')
-    .trim()
-    .toLowerCase()
-  if (id) return `id:${id}`
-  const a = String(
-    (Array.isArray(item?.artists) ? item.artists[0] : item?.artist) || ''
-  )
-    .trim()
-    .toLowerCase()
-  const n = String(item?.name || '')
-    .trim()
-    .toLowerCase()
-  return `${a}|${n}`
-}
 
 async function searchFor(seedArtist, seedTrack) {
   const a = String(seedArtist || '').trim()
@@ -123,6 +108,7 @@ export function useSimilar() {
   // stream directly.
   const songs = computed(() =>
     tracks.value.map((item) => ({
+      ...item,
       song_id: item.song_id || '',
       name: item.name || '',
       artists: Array.isArray(item.artists)

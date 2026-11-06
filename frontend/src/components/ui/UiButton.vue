@@ -7,13 +7,15 @@
     :aria-disabled="disabled || loading || undefined"
     class="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border font-semibold transition-colors duration-150 disabled:opacity-50"
     :class="[sizeClass, variantClass]"
+    :data-variant="variant"
+    :data-has-icon="icon ? '' : undefined"
   >
     <span
       v-if="loading"
       class="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
     />
     <AppIcon v-else-if="icon" :name="icon" :size="iconSize" stroke-width="2" />
-    <slot />
+    <span v-if="$slots.default" class="ui-btn-label"><slot /></span>
     <AppIcon
       v-if="iconRight"
       :name="iconRight"

@@ -87,6 +87,7 @@ export const STROKE = {
     '<circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/>',
   minimize: '<path d="m6 9 6 6 6-6"/>',
   expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  collapse: '<path d="M14 10h6M14 10V4M14 10l7-7M10 14H4M10 14v6M10 14l-7 7"/>',
   timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
   equalizer:
     '<path d="M4 20v-5M4 11V4M9.3 20v-9M9.3 7V4M14.7 20v-3M14.7 13V4M20 20v-7M20 9V4M2 15h4M7.3 7h4M12.7 17h4M18 9h4"/>',

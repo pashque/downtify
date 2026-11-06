@@ -3,7 +3,7 @@
 // OS media controls (Media Session).
 import { ref, computed, watch } from 'vue'
 
-import { normalizeTrack } from '/src/lib/library'
+import { normalizeTrack, providerSongKey, songKey } from '/src/lib/library'
 import { attachEqualizer, resumeEqualizer } from '/src/model/equalizer'
 import { resolveTrackUrl, warmServerCache } from '/src/model/streamResolve'
 
@@ -142,14 +142,18 @@ function buildShuffleOrder() {
 }
 
 function trackIdentity(track) {
-  return track?.file || track?.url || ''
+  if (track?.file) return `file:${track.file}`
+  if (track?.stream) {
+    const id = providerSongKey(track)
+    return id ? `id:${id}` : `song:${songKey(track.artists?.length ? track.artists : track.artist, track.title)}`
+  }
+  return track?.url ? `url:${track.url}` : track
 }
 
 function sameTrackOrder(a, b) {
   if (a.length !== b.length) return false
-  // A streamed track has no file: its (fresh, expiring) URL identifies
-  // it instead, so re-selecting the playing stream never restarts it by
-  // accident - and a new stream never compares equal to the old one.
+  // Streams retain source identity before/after URL resolution. Empty
+  // files/URLs must not make unrelated pending tracks compare equal.
   return a.every((track, i) => trackIdentity(track) === trackIdentity(b[i]))
 }
 
@@ -398,8 +402,9 @@ async function playUnresolved(index) {
   currentTime.value = 0
   duration.value = 0
   let url = ''
+  let videoId = ''
   try {
-    ;({ url } = await resolveTrackUrl(track))
+    ;({ url, videoId } = await resolveTrackUrl(track))
   } catch {
     url = ''
   } finally {
@@ -420,7 +425,9 @@ async function playUnresolved(index) {
     return
   }
   resolveFailures = 0
-  playlist.value[index] = { ...track, url }
+  // Keep the resolved video id: it is what the player's download button
+  // queues (a Spotify/Deezer row only knows its own ids).
+  playlist.value[index] = { ...track, url, video_id: track.video_id || videoId || '' }
   startAudio(ensureAudio(), index)
 }
 
@@ -435,7 +442,7 @@ function prefetchNext() {
     ({ url, videoId }) => {
       // Another queue took its place meanwhile: leave it alone.
       if (playlist.value === list && playlist.value[upcoming] === track) {
-        playlist.value[upcoming] = { ...track, url }
+        playlist.value[upcoming] = { ...track, url, video_id: track.video_id || videoId || '' }
       }
       // Warm the server download too, so the file (not just its URL)
       // already waits when the turn comes.
@@ -649,23 +656,27 @@ const progressPct = computed(() =>
   duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
 )
 
-/** Upcoming tracks, in the order they'll play: `[{ track, index }]`. */
+/** Tracks after the current one, in the queue's own order:
+ * `[{ track, index }]`. Shuffle only changes which one plays next
+ * (see nextIndex); the visible list never reorders. */
 const upcoming = computed(() => {
   const list = playlist.value
-  // Reading these keeps the computed in step with shuffle/index changes.
   const current = currentIndex.value
-  shuffleVersion.value
-  if (shuffle.value && shuffleOrder.length === list.length) {
-    return shuffleOrder
-      .slice(shufflePos + 1)
-      .map((index) => ({ track: list[index], index }))
-  }
   return list
     .slice(current + 1)
     .map((track, k) => ({ track, index: current + 1 + k }))
 })
 
 // ── Media Session (lock screen / headset / keyboard media keys) ──────
+/** Tracks already played in this queue, oldest first (kept so the user
+ * can go back to them). */
+const played = computed(() => {
+  const list = playlist.value
+  const current = currentIndex.value
+  if (current < 0) return []
+  return list.slice(0, current).map((track, index) => ({ track, index }))
+})
+
 function updateMediaSession(track) {
   if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
     return
@@ -803,6 +814,7 @@ export function usePlayer() {
     currentIndex,
     currentTrack,
     upcoming,
+    played,
     context,
     isPlaying,
     isBuffering,

@@ -40,6 +40,7 @@ export function usePlaylistActions() {
     return {
       type: 'playlist',
       title: playlist.title,
+      playlistUrl: playlist.batch?.playlist_url || '',
       cover: playlist.cover || '',
       covers: playlist.covers || [],
       route: { name: 'Playlist', query: { name: playlist.name } },

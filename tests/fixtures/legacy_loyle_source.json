@@ -1,0 +1,309 @@
+[
+  {
+    "song_id": "4mkIH8ixbQ7cpOvhzEL7jc",
+    "name": "Dear Jean",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 103,
+    "url": "https://open.spotify.com/track/4mkIH8ixbQ7cpOvhzEL7jc",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 1,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/1a6489a436f4306c6a957a01ee5bd2d67be63a1c"
+  },
+  {
+    "song_id": "4pjcxC0qgXWZWmcBjzn1az",
+    "name": "Angel",
+    "artists": [
+      "Loyle Carner",
+      "Tom Misch"
+    ],
+    "artist": "Loyle Carner, Tom Misch",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 283,
+    "url": "https://open.spotify.com/track/4pjcxC0qgXWZWmcBjzn1az",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 2,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/66e9c0521f2f51e9ed6a8cecafe5feab42e33647"
+  },
+  {
+    "song_id": "5wXZXabu8JyRGNHqgueUHm",
+    "name": "Ice Water",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 209,
+    "url": "https://open.spotify.com/track/5wXZXabu8JyRGNHqgueUHm",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 3,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/e9328f770c75d253cba48ab3ca9921ee8f6a0681"
+  },
+  {
+    "song_id": "64I9byMYBlS1ARsC3vtpgW",
+    "name": "Ottolenghi",
+    "artists": [
+      "Loyle Carner",
+      "Jordan Rakei"
+    ],
+    "artist": "Loyle Carner, Jordan Rakei",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 197,
+    "url": "https://open.spotify.com/track/64I9byMYBlS1ARsC3vtpgW",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 4,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/8336310499cabce2352c31f547a8b58cf902a678"
+  },
+  {
+    "song_id": "0FhEsw0tLzYcittOixmHPL",
+    "name": "You Don't Know",
+    "artists": [
+      "Loyle Carner",
+      "Rebel Kleff",
+      "Kiko Bun"
+    ],
+    "artist": "Loyle Carner, Rebel Kleff, Kiko Bun",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 250,
+    "url": "https://open.spotify.com/track/0FhEsw0tLzYcittOixmHPL",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 5,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/4e2443462c6f309e1d3d7250f885c3ca74646a16"
+  },
+  {
+    "song_id": "2AYZQuAJIHcM32EBkHgQs3",
+    "name": "Still",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 213,
+    "url": "https://open.spotify.com/track/2AYZQuAJIHcM32EBkHgQs3",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 6,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/bd1ba7d59ec31dfc6150a03be245f954ae90a44a"
+  },
+  {
+    "song_id": "6EVvlyK0meZ3NqynLvIMsy",
+    "name": "It\u2019s Coming Home?",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 36,
+    "url": "https://open.spotify.com/track/6EVvlyK0meZ3NqynLvIMsy",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 7,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/ff2985e392d03ff47f3b9f69b6322808c3d2fde1"
+  },
+  {
+    "song_id": "5rYTMjVkGioNF4MpSQISlg",
+    "name": "Desoleil (Brilliant Corners)",
+    "artists": [
+      "Loyle Carner",
+      "Sampha"
+    ],
+    "artist": "Loyle Carner, Sampha",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 220,
+    "url": "https://open.spotify.com/track/5rYTMjVkGioNF4MpSQISlg",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 8,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/ae61c5c20eb495f4f77e8b43f7c7d9152f7c5a9a"
+  },
+  {
+    "song_id": "6dEe0H4vjEyy2ukczkB25o",
+    "name": "Loose Ends",
+    "artists": [
+      "Loyle Carner",
+      "Jorja Smith"
+    ],
+    "artist": "Loyle Carner, Jorja Smith",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 256,
+    "url": "https://open.spotify.com/track/6dEe0H4vjEyy2ukczkB25o",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 9,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/0e137f833b99d8efb1066509c7a623005867d298"
+  },
+  {
+    "song_id": "6pmbqukeG0WgphcHbAoLzj",
+    "name": "Not Waving, But Drowning",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 64,
+    "url": "https://open.spotify.com/track/6pmbqukeG0WgphcHbAoLzj",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 10,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/ff17fee0a0c34d55c6eb248cb05cf3c626c8d8e1"
+  },
+  {
+    "song_id": "6ZizKmm2kQY7e77rXrlwWs",
+    "name": "Krispy",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 221,
+    "url": "https://open.spotify.com/track/6ZizKmm2kQY7e77rXrlwWs",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 11,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/ddcca64a7d6f261c130f81b2ddf99a602fdd80a3"
+  },
+  {
+    "song_id": "07pxaWIMEcz0nKJahhII1y",
+    "name": "Sail Away Freestyle",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 256,
+    "url": "https://open.spotify.com/track/07pxaWIMEcz0nKJahhII1y",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 12,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/761d55525237f5659269b7ae5500504c11c08532"
+  },
+  {
+    "song_id": "0yJYiXx51WML5XvFz4Ihnh",
+    "name": "Looking Back",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 178,
+    "url": "https://open.spotify.com/track/0yJYiXx51WML5XvFz4Ihnh",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 13,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/a0278611ef05ba79f252b608db6d54593ccc49e9"
+  },
+  {
+    "song_id": "5AxhoDqSWt4WQjBvhh6aq3",
+    "name": "Carluccio",
+    "artists": [
+      "Loyle Carner"
+    ],
+    "artist": "Loyle Carner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 191,
+    "url": "https://open.spotify.com/track/5AxhoDqSWt4WQjBvhh6aq3",
+    "explicit": true,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 14,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/8856488e134b2b0ae54d204bce9bf8cc8e58831b"
+  },
+  {
+    "song_id": "6xWI9x7ojVUmvTxo1PzdgX",
+    "name": "Dear Ben",
+    "artists": [
+      "Loyle Carner",
+      "Jean Coyle-Larner"
+    ],
+    "artist": "Loyle Carner, Jean Coyle-Larner",
+    "album_name": "Not Waving, But Drowning",
+    "cover_url": "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273b8fc4ee31953f1133106d64a",
+    "duration": 210,
+    "url": "https://open.spotify.com/track/6xWI9x7ojVUmvTxo1PzdgX",
+    "explicit": false,
+    "release_date": "2019-04-19",
+    "year": "2019",
+    "source": "spotify",
+    "track_number": 15,
+    "album_artist": "Loyle Carner",
+    "album_track_total": 15,
+    "preview_url": "https://p.scdn.co/mp3-preview/1632d127eafe8abff7bd9cd07aeb201dcabfccf3"
+  }
+]
