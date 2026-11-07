@@ -1,5 +1,6 @@
 """Missing-only and deliberate re-download are per-request, not global mutations."""
 import asyncio
+import subprocess
 from unittest.mock import AsyncMock
 import pytest
 from downtify.downloader import Downloader
@@ -8,11 +9,24 @@ from downtify import api
 SONG=dict(song_id='5fHrHoJKfCgBd35zwIBmUK', source='spotify', name='D4L',artists=['Future','Drake','Young Thug'],album_artist='Drake',album_name='Dark Lane Demo Tapes',release_date='2020-05-01',track_number=9)
 FULL='{albumartist}/{albumartist} - {album} ({year})/{tracknumber}. {artists} - {title}.{output-ext}'
 
+
+def write_audio(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ['ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+         'sine=frequency=440:duration=0.2', '-metadata', 'title=D4L',
+         '-metadata', 'artist=Future, Drake, Young Thug', '-metadata',
+         'album=Dark Lane Demo Tapes', '-metadata', 'album_artist=Drake',
+         '-codec:a', 'libmp3lame', '-q:a', '9', '-y', str(path)],
+        check=True,
+    )
+
+
 @pytest.fixture
 def existing(tmp_path):
     d=Downloader(tmp_path/'downloads',output_template=FULL,folder_structure=True,playlist_use_library=True,overwrite_existing_files=True)
     target,prefix,name=d._target_location(SONG,None)
-    (target/(name+'.mp3')).write_bytes(b'file existence fixture')
+    write_audio(target / (name+'.mp3'))
     return d,prefix+name+'.mp3'
 
 

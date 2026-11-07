@@ -1,5 +1,8 @@
 """Monitor recovery uses physical catalog membership, not just watch history."""
 import asyncio
+import shutil
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -38,10 +41,24 @@ def run(db, playlist, downloader, library):
     return asyncio.run(sweep())
 
 
+@lru_cache(maxsize=None)
+def _audio_bytes(suffix):
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg unavailable')
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / ('fixture' + suffix)
+        codec = {'mp3': ['-q:a', '9'], 'opus': ['-c:a', 'libopus', '-b:a', '32k'],
+                 'm4a': ['-c:a', 'aac', '-b:a', '64k'], 'flac': ['-c:a', 'flac']}[suffix.lstrip('.')]
+        subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                        'sine=frequency=440:duration=0.25', *codec, '-y', str(path)], check=True)
+        return path.read_bytes()
+
+
 def put(downloader, filename):
     path = downloader.download_dir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b'audio')
+    path.write_bytes(_audio_bytes(path.suffix))
     return path
 
 

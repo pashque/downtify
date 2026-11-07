@@ -37,12 +37,12 @@ def test_resolve_target_dir_with_subdir_appends_sanitized_name(tmp_path):
 
 
 def test_resolve_target_dir_sanitizes_unsafe_subdir(tmp_path):
-    # '/' now separates nested path components; other unsafe characters are
-    # stripped per-component.
+    # '/' in a supplied subdir separates components; valid Linux punctuation
+    # remains unchanged within each component.
     d = _make_downloader(tmp_path)
     target, prefix = d._resolve_target_dir('Bad/Name:Here?')
-    assert target == tmp_path / 'Bad' / 'NameHere'
-    assert prefix == 'Bad/NameHere/'
+    assert target == tmp_path / 'Bad' / 'Name:Here?'
+    assert prefix == 'Bad/Name:Here?/'
 
 
 def test_resolve_target_dir_nests_multi_component_subdir(tmp_path):

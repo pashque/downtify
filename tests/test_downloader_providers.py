@@ -65,7 +65,41 @@ def _slskd_file(tmp_path: Path) -> tuple[Path, Path]:
     return slskd_dir, source
 
 
-def test_slskd_leave_in_place_tags_the_file_where_it_is(
+def test_slskd_leave_in_place_does_not_mutate_or_claim_acquisition(
+    tmp_path, monkeypatch, no_youtube
+):
+    import hashlib
+    import os
+
+    slskd_dir, source = _slskd_file(tmp_path)
+    before = (hashlib.sha256(source.read_bytes()).hexdigest(), source.stat().st_mtime_ns)
+    monkeypatch.setattr(
+        downloader_mod, 'download_from_slskd', lambda *a, **k: source
+    )
+    monkeypatch.setattr(
+        downloader_mod, '_fetch_itunes_genre', lambda song: 'Rock'
+    )
+    called = []
+    reports = []
+    d = Downloader(
+        tmp_path / 'downloads', audio_providers=['slskd'],
+        slskd_settings={'enabled': True, 'leave_in_place': True,
+                        'source_dir': str(slskd_dir)},
+    )
+    d.on_downloaded = lambda *args: called.append(args)
+
+    result = d.download(dict(_SONG), lambda *args: reports.append(args))
+
+    assert result == 'slskd/Artist - Album/01 - Track.mp3'
+    assert not result.acquired
+    assert called == []
+    assert (hashlib.sha256(source.read_bytes()).hexdigest(), source.stat().st_mtime_ns) == before
+    assert ID3(source).getall('TCON') == []
+    assert not (source.parent / 'cover.jpg').exists()
+    assert 'lyrics' not in result
+
+
+def test_slskd_leave_in_place_returns_virtual_path_without_tagging(
     tmp_path, monkeypatch, no_youtube
 ):
     slskd_dir, source = _slskd_file(tmp_path)
@@ -93,10 +127,10 @@ def test_slskd_leave_in_place_tags_the_file_where_it_is(
 
     assert stored == 'slskd/Artist - Album/01 - Track.mp3'
     assert no_youtube == []
-    assert str(ID3(source).getall('TCON')[0]) == 'Rock'
-    # Nothing written into slskd's own folders besides the tags.
-    assert not (source.parent / 'cover.jpg').exists()
-    assert reports[-1] == 'slskd'
+    assert not ID3(source).getall('TCON')
+    # leave-in-place is reuse, not acquisition.
+    assert not stored.acquired
+    assert stored.skipped
 
 
 def test_slskd_copy_mode_uses_main_destination_and_keeps_format(

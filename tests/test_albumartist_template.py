@@ -20,13 +20,13 @@ def test_albumartist_falls_back_to_first_artist():
 
 def test_albumartist_unknown_and_sanitized():
     assert Downloader._template_values({})['albumartist'] == 'Unknown Artist'
-    assert Downloader._template_values(dict(album_artist='  AC/DC  '))['albumartist'] == 'AC∕DC'
+    assert Downloader._template_values(dict(album_artist='AC/DC'))['albumartist'] == 'ACDC'
 
 
 def test_artist_names_keep_trailing_punctuation_in_safe_download_names():
     values = Downloader._template_values(dict(artists=['Fred again..']))
     assert values['artists'] == 'Fred again..'
-    assert Downloader._template_values(dict(album_artist='A:B'))['albumartist'] == 'A：B'
+    assert Downloader._template_values(dict(album_artist='A:B'))['albumartist'] == 'A:B'
 
 
 def test_albumartist_template_is_library_relative_not_playlist_relative(tmp_path):

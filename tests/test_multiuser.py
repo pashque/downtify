@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import subprocess
 import threading
 from pathlib import Path
 from typing import Any
@@ -436,7 +437,15 @@ def _slow_downloader(tmp_path, entered, release, calls):
         entered.set()
         assert release.wait(timeout=10)
         target = downloads / 'Artist - Shared.mp3'
-        target.write_bytes(b'x' * 100)
+        subprocess.run(
+            [
+                'ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+                'sine=frequency=440:duration=0.2', '-metadata', 'title=Shared',
+                '-metadata', 'artist=Artist', '-codec:a', 'libmp3lame',
+                '-q:a', '9', '-y', str(target),
+            ],
+            check=True,
+        )
         return 'Artist - Shared.mp3'
 
     downloader = Downloader(download_dir=downloads, audio_format='mp3')
@@ -496,7 +505,8 @@ def test_simultaneous_download_is_fetched_once_and_owned_by_both(
     assert second_file == 'Artist - Shared.mp3'
     # One fetch for two accounts.
     assert calls == ['shared-1']
-    key = file_content_key_from_name_and_size('Artist - Shared.mp3', 100)
+    size = (tmp_path / 'downloads' / 'Artist - Shared.mp3').stat().st_size
+    key = file_content_key_from_name_and_size('Artist - Shared.mp3', size)
     owners = api.state.track_owners
     assert owners is not None
     assert key in owners.owned_keys(5)

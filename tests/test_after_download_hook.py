@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+import wave
 from pathlib import Path
 
 import pytest
@@ -73,20 +74,37 @@ def test_the_hook_is_per_downloader_not_shared(tmp_path, downloader):
     assert other.on_downloaded is None
 
 
+def _write_matching_audio(path: Path) -> None:
+    """Create tiny valid WAV audio with identity tags for reuse validation."""
+    with wave.open(str(path), 'wb') as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b'\x00\x00' * 800)
+    from mutagen import File as MutagenFile
+    tagged = MutagenFile(str(path), easy=True)
+    tagged.add_tags()
+    from mutagen.id3 import TIT2, TPE1
+    tagged.tags.add(TIT2(encoding=3, text=SONG['name']))
+    tagged.tags.add(TPE1(encoding=3, text=SONG['artists'][0]))
+    tagged.save()
+
+
 def test_a_song_already_in_the_library_does_not_call_the_hook(
     tmp_path, monkeypatch
 ):
     dl = Downloader(tmp_path, overwrite_existing_files=False)
     monkeypatch.setattr(Downloader, '_can_resolve_path_early', lambda *a: True)
+    _write_matching_audio(tmp_path / 'old.wav')
     monkeypatch.setattr(
         Downloader,
         'find_existing_download',
-        lambda self, song, subdir: 'old.mp3',
+        lambda self, song, subdir: 'old.wav',
     )
     dl.on_downloaded = lambda song, filename: pytest.fail(
         'it was not downloaded'
     )
-    assert dl.download(SONG) == 'old.mp3'
+    assert dl.download(SONG) == 'old.wav'
 
 
 def test_a_song_found_only_after_enrichment_does_not_call_the_hook_either(
@@ -102,15 +120,16 @@ def test_a_song_found_only_after_enrichment_does_not_call_the_hook_either(
     monkeypatch.setattr(
         Downloader, '_target_lock', lambda self, song, subdir=None: contextlib.nullcontext()
     )
+    _write_matching_audio(tmp_path / 'old.wav')
     monkeypatch.setattr(
         Downloader,
         'find_existing_download',
-        lambda self, song, subdir: 'old.mp3',
+        lambda self, song, subdir: 'old.wav',
     )
     dl.on_downloaded = lambda song, filename: pytest.fail(
         'it was not downloaded'
     )
-    assert dl.download(SONG) == 'old.mp3'
+    assert dl.download(SONG) == 'old.wav'
 
 
 def test_a_new_file_found_under_the_lock_calls_the_hook(tmp_path, monkeypatch):
@@ -138,7 +157,7 @@ def test_a_new_file_found_under_the_lock_calls_the_hook(tmp_path, monkeypatch):
 
 def test_a_file_a_provider_downloaded_calls_the_hook(tmp_path, monkeypatch):
     # slskd: the file is already there, and only gets tagged.
-    dl = Downloader(tmp_path)
+    dl = Downloader(tmp_path, slskd_settings={'leave_in_place': False})
     spotify_song = {**SONG, 'source': 'spotify', 'song_id': 'a' * 22}
     spotify_song.pop('cover_url')
     monkeypatch.setattr(

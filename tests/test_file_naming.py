@@ -23,6 +23,7 @@ from downtify.file_naming import file_name_key, sanitize_file_name
         ('?uestlove', '?uestlove'),
         ('Some: Name', 'Some: Name'),
         ('a|b', 'a|b'),
+        ('???', '???'),
         ("Guns N' Roses", "Guns N' Roses"),
         ('  padded  ', 'padded'),
         ('.hidden', 'hidden'),
@@ -34,7 +35,7 @@ def test_sanitize_file_name_drops_what_a_file_name_cant_hold(name, expected):
     assert sanitize_file_name(name) == expected
 
 
-@pytest.mark.parametrize('name', ['', None, '???', '...', '  '])
+@pytest.mark.parametrize('name', ['', None, '...', '  '])
 def test_sanitize_file_name_falls_back_to_unknown(name):
     assert sanitize_file_name(name) == 'unknown'  # type: ignore[arg-type]
 
@@ -89,6 +90,12 @@ def test_the_key_of_an_unusable_name_is_empty_not_unknown():
 
 def test_the_key_ignores_case_with_casefold():
     assert file_name_key('STRASSE') == file_name_key('straße')
+
+
+def test_legacy_name_matching_keeps_windows_punctuation_normalization():
+    assert file_name_key('*NSYNC') == file_name_key('NSYNC')
+    assert file_name_key('M.I.A.') == file_name_key('M.I.A')
+    assert file_name_key('?uestlove') == file_name_key('uestlove')
 
 
 def test_the_module_is_a_leaf():

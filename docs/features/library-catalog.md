@@ -20,7 +20,7 @@ Downtify keeps a small **catalog** of the files under `/downloads` (the slskd fo
 | **Hidden items** | `/data/downtify_library.db` | The songs, albums and artists an admin [hid from users](users.md#hiding-from-users) |
 | **Cover art cache** | `/data/cover_cache` (optional) | Extracted cover images for `GET /cover` |
 
-Files are matched across moves by a **content key** — a hash of the file's name and size. Moving a file to another folder keeps its key; replacing it with a different file gives it a new one.
+Files are matched across moves by a **content key** — a hash of the file's name and size. Moving a file to another folder keeps its key; replacing it with a different file gives it a new one. This key supports path reconciliation, not full-file integrity verification. Missing tag values remain unknown; Downtify does not infer identity from absent metadata. Existing-copy reuse validates available identity evidence and refuses conflicting known source IDs rather than destructively reusing that file. Indexed source-ID evidence describes recorded provenance, but cannot guarantee that the audio is actually that recording. Legacy filenames and indexes are not automatically migrated.
 
 ## Settings → Library
 

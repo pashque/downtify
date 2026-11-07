@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
+import subprocess
 from unittest.mock import MagicMock
 
 from downtify.downloader import Downloader
@@ -137,10 +139,19 @@ def _snapshot_fixture(tmp_path: Path):
     download_dir = tmp_path / 'downloads'
     (download_dir / 'Mix').mkdir(parents=True)
     indexed = download_dir / 'Artist - Indexed.mp3'
-    indexed.write_bytes(b'audio')
+    if not shutil.which('ffmpeg'):
+        import pytest
+        pytest.skip('ffmpeg unavailable')
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                    'sine=frequency=440:duration=0.25', '-metadata', 'title=Indexed',
+                    '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(indexed)], check=True)
     # Not in the track index: found by its expected name, which keeps
     # an upstream extension (opus) as existing_filename_for allows.
-    (download_dir / 'Mix' / 'Artist - Named.opus').write_bytes(b'audio')
+    named = download_dir / 'Mix' / 'Artist - Named.opus'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                    'sine=frequency=440:duration=0.25', '-metadata', 'title=Named',
+                    '-metadata', 'artist=Artist', '-c:a', 'libopus', '-b:a', '32k',
+                    '-y', str(named)], check=True)
     downloader = Downloader(download_dir, audio_format='mp3')
     index = TrackIndex(tmp_path / 'lib.db')
     index.register(

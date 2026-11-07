@@ -1,6 +1,18 @@
 """Forced album requests never mutate shared storage policy."""
 from concurrent.futures import ThreadPoolExecutor
+import subprocess
 import pytest
+
+
+def _make_audio(path):
+    """Create a small, valid synthetic MP3 for tests that reuse audio files."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        'ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+        'sine=frequency=440:duration=0.25', '-codec:a', 'libmp3lame',
+        '-q:a', '9', '-y', str(path),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    return path
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download
 from downtify import api
@@ -39,7 +51,7 @@ def test_legacy_forced_album_does_not_reuse_indexed_playlist(tmp_path):
     d = Downloader(tmp_path / 'audio', folder_structure=None)
     old = d.download_dir / 'Playlist' / 'old.mp3'
     old.parent.mkdir(parents=True)
-    old.write_bytes(b'fixture')
+    _make_audio(old)
     index = TrackIndex(tmp_path / 'index.db')
     index.register_song(SONG, 'Playlist/old.mp3', full_path=old)
     assert resolve_existing_download(d, FORCED, track_index=index) is None
@@ -48,7 +60,7 @@ def test_legacy_forced_album_does_not_reuse_indexed_playlist(tmp_path):
 def test_forced_album_copies_local_source_even_with_leave_in_place(tmp_path, monkeypatch):
     from downtify import downloader as module
     source = tmp_path / 'source.mp3'
-    source.write_bytes(b'local source fixture')
+    _make_audio(source)
     d = Downloader(tmp_path / 'downloads', folder_structure=False, slskd_settings={'leave_in_place': True})
     monkeypatch.setattr(module._MetadataLookups, 'collect', lambda self: None)
     monkeypatch.setattr(d, '_tag_file', lambda *a, **kw: None)
@@ -68,7 +80,7 @@ def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, m
     def fetch(song, video, progress, subdir, provider):
         target, prefix, name = d._target_location(song, subdir)
         writes.append(prefix + name)
-        (target / (name + '.mp3')).write_bytes(b'fixture')
+        _make_audio(target / (name + '.mp3'))
         return prefix + name + '.mp3'
     monkeypatch.setattr(d, '_fetch_and_tag', fetch)
     with ThreadPoolExecutor(max_workers=3) as pool:
@@ -85,7 +97,7 @@ def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch
     import threading
     from downtify import downloader as module
     source = tmp_path / 'source.mp3'
-    source.write_bytes(b'fixture')
+    _make_audio(source)
     d = Downloader(tmp_path / 'downloads', folder_structure=False)
     barrier = threading.Barrier(2)
     monkeypatch.setattr(module.spotify_mod, 'enrich_track_from_spotify_if_sparse', lambda song: song)
@@ -134,7 +146,7 @@ def test_single_endpoint_retains_album_controls_for_all_sources(tmp_path, monkey
 def test_forced_same_target_skips_without_network_or_global_mutation(tmp_path, monkeypatch):
     d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=True)
     target, prefix, name = d._target_location(FORCED, None)
-    (target / (name + '.mp3')).write_bytes(b'fixture')
+    _make_audio(target / (name + '.mp3'))
     monkeypatch.setattr(d, '_resolve_source', lambda *a: pytest.fail('same destination must skip'))
     assert d.download(FORCED, subdir='Playlist') == STEM + '.mp3'
     assert d.folder_structure is False

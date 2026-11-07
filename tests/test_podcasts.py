@@ -384,7 +384,7 @@ def test_episode_filename_uses_the_published_date_and_title():
     name = episode_filename(ep)
     assert name.startswith('2026-09-18 - ')
     assert name.endswith('.mp3')
-    assert '"' not in name
+    assert '"Weird"' in name
 
 
 def test_episode_filename_extension_follows_enclosure_type():

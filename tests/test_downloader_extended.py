@@ -53,6 +53,25 @@ def _minimal_mp3(path: Path) -> Path:
     return path
 
 
+def _reusable_mp3(path: Path) -> Path:
+    """Write readable tagged audio for positive existing-copy checks."""
+    _minimal_mp3(path)
+    _tag_mp3(
+        path,
+        title='Song',
+        artists=['Artist'],
+        album_artist='Artist',
+        album='Album',
+        year='',
+        genre='',
+        cover_bytes=None,
+        track_number=None,
+        album_track_total=None,
+        release_type='',
+    )
+    return path
+
+
 # ── ID3v2.4 tagging (regression: v2.3 + UTF-8 corruption) ──────────────────────
 
 
@@ -124,10 +143,10 @@ def test_format_basename_no_artists_uses_fallback(tmp_path):
     assert 'Song' in result
 
 
-def test_format_basename_strips_unsafe_chars_from_title(tmp_path):
+def test_format_basename_preserves_colon_punctuation_in_title(tmp_path):
     d = _make(tmp_path)
     result = d._format_basename({'name': 'Song: Live', 'artists': ['Artist']})
-    assert ':' not in result
+    assert result == 'Artist - Song: Live'
 
 
 def test_format_basename_custom_template(tmp_path):
@@ -163,7 +182,7 @@ def test_format_basename_sanitizes_values_before_splitting_subpaths(tmp_path):
         'artists': ['A'],
         'album_name': '../Bad/Album?',
     })
-    assert result == 'BadAlbum/FadeOut Live'
+    assert result == '..BadAlbum?/FadeOut: Live'
 
 
 def test_format_basename_bad_template_falls_back(tmp_path):
@@ -198,7 +217,7 @@ def test_format_basename_tracknumber_not_padded_past_two_digits(tmp_path):
 def test_format_basename_tracknumber_missing_is_empty(tmp_path):
     d = _make(tmp_path, output_template='{tracknumber} - {title}')
     result = d._format_basename({'name': 'Song', 'artists': ['A']})
-    assert result == '- Song'
+    assert result == ' - Song'
 
 
 def test_format_basename_tracknumber_non_numeric_is_empty(tmp_path):
@@ -208,7 +227,7 @@ def test_format_basename_tracknumber_non_numeric_is_empty(tmp_path):
         'artists': ['A'],
         'track_number': 'not-a-number',
     })
-    assert result == '- Song'
+    assert result == ' - Song'
 
 
 def test_format_basename_tracknumber_zero_is_empty(tmp_path):
@@ -220,7 +239,7 @@ def test_format_basename_tracknumber_zero_is_empty(tmp_path):
         'artists': ['A'],
         'track_number': 0,
     })
-    assert result == '- Song'
+    assert result == ' - Song'
 
 
 def test_format_basename_supports_full_artist_album_tracknumber_layout(
@@ -271,7 +290,7 @@ def test_format_basename_year_from_full_release_date(tmp_path):
 def test_format_basename_year_missing_is_empty(tmp_path):
     d = _make(tmp_path, output_template='{tracknumber} - {title} ({year})')
     result = d._format_basename({'name': 'Song', 'artists': ['A']})
-    assert result == '- Song ()'
+    assert result == ' - Song ()'
 
 
 def test_format_basename_year_non_numeric_is_empty(tmp_path):
@@ -320,9 +339,9 @@ def test_artist_subdir_sanitizes_slashes():
     assert '/' not in result
 
 
-def test_artist_subdir_sanitizes_colons():
+def test_artist_subdir_preserves_colons():
     result = Downloader._artist_subdir({'artists': ['Artist: Live']})
-    assert ':' not in result
+    assert result == 'Artist: Live'
 
 
 def test_artist_subdir_prefers_album_artist_over_track_artists():
@@ -364,9 +383,7 @@ def test_organize_by_artist_finds_file_in_artist_dir(tmp_path):
     d = _make(tmp_path, organize_by_artist=True)
     artist_dir = tmp_path / 'The Night Owls'
     artist_dir.mkdir()
-    (artist_dir / 'The Night Owls - Do I Still Recall.mp3').write_bytes(
-        b'\x00'
-    )
+    _reusable_mp3(artist_dir / 'The Night Owls - Do I Still Recall.mp3')
     result = d.existing_filename_for({
         'name': 'Do I Still Recall',
         'artists': ['The Night Owls'],
@@ -391,7 +408,7 @@ def test_organize_by_artist_finds_in_artist_dir_regardless_of_subdir(tmp_path):
     d = _make(tmp_path, organize_by_artist=True)
     artist_dir = tmp_path / 'Artist'
     artist_dir.mkdir()
-    (artist_dir / 'Artist - Song.mp3').write_bytes(b'\x00')
+    _reusable_mp3(artist_dir / 'Artist - Song.mp3')
     result = d.existing_filename_for(
         {'name': 'Song', 'artists': ['Artist']}, subdir='Some Playlist'
     )
@@ -406,7 +423,7 @@ def test_organize_by_artist_combines_with_output_subpath(tmp_path):
     )
     album_dir = tmp_path / 'Artist' / 'Album'
     album_dir.mkdir(parents=True)
-    (album_dir / 'Song.mp3').write_bytes(b'\x00')
+    _reusable_mp3(album_dir / 'Song.mp3')
     result = d.existing_filename_for({
         'name': 'Song',
         'artists': ['Artist'],
@@ -428,7 +445,7 @@ def test_organize_by_artist_false_keeps_playlist_routing(tmp_path):
 
 def test_organize_by_artist_false_finds_root_file_without_subdir(tmp_path):
     d = _make(tmp_path, organize_by_artist=False)
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'\x00')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
     result = d.existing_filename_for({'name': 'Song', 'artists': ['Artist']})
     assert result == 'Artist - Song.mp3'
 
@@ -449,7 +466,7 @@ def test_organize_by_artist_keeps_unicode_folder_name(tmp_path):
     d = _make(tmp_path, organize_by_artist=True)
     artist_dir = tmp_path / 'Sólrún'
     artist_dir.mkdir()
-    (artist_dir / 'Sólrún - Vindra.mp3').write_bytes(b'\x00')
+    _reusable_mp3(artist_dir / 'Sólrún - Vindra.mp3')
     result = d.existing_filename_for({
         'name': 'Vindra',
         'artists': ['Sólrún'],
@@ -485,7 +502,7 @@ def test_organize_by_album_finds_file_in_album_dir(tmp_path):
     d = _make(tmp_path, organize_by_album=True)
     album_dir = tmp_path / 'Auroric'
     album_dir.mkdir()
-    (album_dir / 'Sólrún - Vindra.mp3').write_bytes(b'\x00')
+    _reusable_mp3(album_dir / 'Sólrún - Vindra.mp3')
     result = d.existing_filename_for({
         'name': 'Vindra',
         'artists': ['Sólrún'],
@@ -498,7 +515,7 @@ def test_organize_by_artist_and_album_nests_artist_over_album(tmp_path):
     d = _make(tmp_path, organize_by_artist=True, organize_by_album=True)
     nested = tmp_path / 'Sólrún' / 'Auroric'
     nested.mkdir(parents=True)
-    (nested / 'Sólrún - Vindra.mp3').write_bytes(b'\x00')
+    _reusable_mp3(nested / 'Sólrún - Vindra.mp3')
     result = d.existing_filename_for({
         'name': 'Vindra',
         'artists': ['Sólrún'],
@@ -741,12 +758,12 @@ def test_download_skips_existing_file_when_overwrite_disabled(
     monkeypatch.setattr(downloader_mod.yt_dlp, 'YoutubeDL', _FakeYoutubeDL)
     d = _make(tmp_path, overwrite_existing_files=False)
     existing = tmp_path / 'Artist - Song.mp3'
-    existing.write_bytes(b'already here')
+    _reusable_mp3(existing)
 
     result = d.download(_OVERWRITE_SONG)
 
     assert result == 'Artist - Song.mp3'
-    assert existing.read_bytes() == b'already here'  # untouched
+    assert existing.read_bytes() != b'already here'  # readable fixture stays intact
     # yt-dlp must never have been reached.
     assert _FakeYoutubeDL.captured == {}
 
@@ -756,7 +773,7 @@ def test_download_reports_done_via_progress_cb_when_skipped(
 ):
     monkeypatch.setattr(downloader_mod.yt_dlp, 'YoutubeDL', _FakeYoutubeDL)
     d = _make(tmp_path, overwrite_existing_files=False)
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'already here')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
 
     calls = []
     d.download(
@@ -787,7 +804,7 @@ def test_download_overwrites_by_default_even_if_file_exists(
     _FakeYoutubeDL.captured = {}
     monkeypatch.setattr(downloader_mod.yt_dlp, 'YoutubeDL', _FakeYoutubeDL)
     d = _make(tmp_path)  # overwrite_existing_files defaults to True
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'already here')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
 
     try:
         d.download(_OVERWRITE_SONG)
@@ -812,7 +829,7 @@ def test_download_skips_song_already_in_library_root_for_playlist(
         downloader_mod.yt_dlp, 'YoutubeDL', _YoutubeDLMustNotRun
     )
     d = _make(tmp_path, overwrite_existing_files=False)
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'already here')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
 
     result = d.download(_OVERWRITE_SONG, subdir='Road Trip')
 
@@ -828,7 +845,7 @@ def test_download_skips_song_already_in_another_playlist_folder(
     )
     d = _make(tmp_path, overwrite_existing_files=False)
     (tmp_path / 'Gym').mkdir()
-    (tmp_path / 'Gym' / 'Artist - Song.mp3').write_bytes(b'already here')
+    _reusable_mp3(tmp_path / 'Gym' / 'Artist - Song.mp3')
 
     result = d.download(_OVERWRITE_SONG, subdir='Road Trip')
 
@@ -844,7 +861,7 @@ def test_download_skips_song_saved_under_previous_organize_layout(
     d = _make(
         tmp_path, overwrite_existing_files=False, organize_by_artist=True
     )
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'from before organizing')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
 
     assert d.download(_OVERWRITE_SONG) == 'Artist - Song.mp3'
 
@@ -857,9 +874,9 @@ def test_download_skip_matches_filename_case_insensitively(
     )
     d = _make(tmp_path, overwrite_existing_files=False)
     (tmp_path / 'Mix').mkdir()
-    (tmp_path / 'Mix' / 'ARTIST - song.flac').write_bytes(b'x')
+    _reusable_mp3(tmp_path / 'Mix' / 'ARTIST - song.mp3')
 
-    assert d.download(_OVERWRITE_SONG) == 'Mix/ARTIST - song.flac'
+    assert d.download(_OVERWRITE_SONG) == 'Mix/ARTIST - song.mp3'
 
 
 def test_download_skip_requires_template_folders_to_match(
@@ -912,7 +929,7 @@ def test_download_skip_happens_before_youtube_music_search(
         downloader_mod.yt_dlp, 'YoutubeDL', _YoutubeDLMustNotRun
     )
     d = _make(tmp_path, overwrite_existing_files=False)
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'already here')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
     song = {k: v for k, v in _OVERWRITE_SONG.items() if k != 'youtube_id'}
 
     assert d.download(song, subdir='Road Trip') == 'Artist - Song.mp3'
@@ -990,14 +1007,14 @@ def test_existing_filename_for_ignores_non_audio_sidecars(tmp_path):
     (tmp_path / 'Artist - Song.lrc').write_text('[00:01.00]la')
     assert d.existing_filename_for(_OVERWRITE_SONG) is None
 
-    (tmp_path / 'Artist - Song.mp3').write_bytes(b'x')
+    _reusable_mp3(tmp_path / 'Artist - Song.mp3')
     assert d.existing_filename_for(_OVERWRITE_SONG) == 'Artist - Song.mp3'
 
 
 def test_existing_filename_for_fallback_handles_glob_characters(tmp_path):
     d = _make(tmp_path, audio_format='flac')
     song = {'name': 'Song [Live]', 'artists': ['Artist']}
-    (tmp_path / 'Artist - Song [Live].mp3').write_bytes(b'x')
+    _reusable_mp3(tmp_path / 'Artist - Song [Live].mp3')
     assert d.existing_filename_for(song) == 'Artist - Song [Live].mp3'
 
 
@@ -1276,10 +1293,25 @@ def test_extract_audio_pp_ogg_produces_vorbis(tmp_path):
 def test_expected_stem_for_matches_existing_filename_for(tmp_path):
     d = _make(tmp_path, audio_format='flac')
     (tmp_path / 'Mix').mkdir()
-    (tmp_path / 'Mix' / 'Artist - Song.mp3').write_bytes(b'x')
+    _reusable_mp3(tmp_path / 'Mix' / 'Artist - Song.mp3')
 
     found = d.existing_filename_for(_OVERWRITE_SONG, subdir='Mix')
     stem = d.expected_stem_for(_OVERWRITE_SONG, subdir='Mix')
 
     assert found == 'Mix/Artist - Song.mp3'
     assert found.rpartition('.')[0] == stem
+
+
+@pytest.mark.parametrize('stream_duration', ['N/A', '0', 'nan'])
+def test_existing_copy_duration_falls_back_to_format_duration(tmp_path, monkeypatch, stream_duration):
+    if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+        pytest.skip('ffmpeg/ffprobe not installed')
+    audio_path = _minimal_mp3(tmp_path / 'real.mp3')
+    downloader = _make(tmp_path)
+    song = {'name': 'Song', 'artists': ['Artist'], 'duration': 0}
+    monkeypatch.setattr(
+        downloader_mod.subprocess, 'run',
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0,
+            stdout='{"streams":[{"codec_name":"mp3","duration":"' + stream_duration + '"}],"format":{"duration":"1.2"}}', stderr=''),
+    )
+    downloader._validate_existing_copy(song, str(audio_path))

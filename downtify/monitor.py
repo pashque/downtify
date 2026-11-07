@@ -957,17 +957,21 @@ async def check_playlist(
             downloaded += 1
             if filename:
                 resolved[track_id] = filename
-                await asyncio.to_thread(
-                    _register_monitored_download,
-                    song,
-                    filename,
-                    downloader,
-                    library,
-                    settings or {},
-                    playlist_name=playlist.name,
-                    track_order=track_positions[id(song)],
-                    owner_id=playlist.user_id,
-                )
+                # Downloader may return a filename for an already-present
+                # copy. Preserve watch history/manifest, but do not claim
+                # source provenance or ownership unless this sweep acquired it.
+                if getattr(filename, 'acquired', True):
+                    await asyncio.to_thread(
+                        _register_monitored_download,
+                        song,
+                        filename,
+                        downloader,
+                        library,
+                        settings or {},
+                        playlist_name=playlist.name,
+                        track_order=track_positions[id(song)],
+                        owner_id=playlist.user_id,
+                    )
             if settings is None or settings.get('generate_m3u', True):
                 # Rewrite the M3U after every track rather than once the
                 # whole sweep finishes, so the playlist grows as it
@@ -1462,7 +1466,7 @@ async def check_artist(
                 invalidate_library_paths_cache()
                 known_tracks[track_id] = filename
                 downloaded += 1
-                if library is not None and filename:
+                if library is not None and filename and getattr(filename, 'acquired', True):
                     await asyncio.to_thread(
                         _record_artist_sweep_owner,
                         library,

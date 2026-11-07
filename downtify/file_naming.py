@@ -1,17 +1,9 @@
-"""How a name becomes a file or folder name - and, from that, when two names
-are "the same name on disk".
+"""Filesystem component rendering and legacy, lossy name matching.
 
-A leaf module (it imports nothing from Downtify) so that both the
-downloader, which writes the files, and the code that looks an artist up by
-name on a streaming service can use the one rule without importing each
-other.
-
-Downloads store ``AC/DC`` as ``ACDC``: the characters a file name can't hold
-are dropped. The library then takes an artist's name from the audio tag and,
-for a track without one, from that file name - so the same artist can turn up
-as ``AC/DC`` or as ``ACDC``. Matching a name against a service's search
-results by :func:`file_name_key` treats both as the same, since to the disk
-they are.
+Linux filename rendering preserves valid punctuation. ``file_name_key`` is a
+historical search compatibility key, not proof that two names or recordings
+are identical on disk; it can collapse distinct names such as ``*NSYNC`` and
+``NSYNC``. This leaf module imports no other Downtify modules.
 """
 
 from __future__ import annotations
@@ -30,15 +22,21 @@ def _without_invalid_chars(text: str) -> str:
 
 
 def sanitize_file_name(text: str) -> str:
-    """*text* as a single file or folder name: the characters a file name
-    can't hold are dropped, and so are surrounding whitespace and dots.
-    ``'unknown'`` when nothing is left."""
+    """Render a Linux filename component, retaining supported punctuation.
 
-    return _without_invalid_chars(text) or 'unknown'
+    Slash and control characters are removed, surrounding whitespace and
+    leading dots are stripped, and empty results become ``'unknown'``.
+    """
+
+    # The legacy comparison key intentionally retains its older, lossy
+    # normalization. Rendering a Linux component must not use that key.
+    component = re.sub(r'[/\x00-\x1f]', '', text or '').strip().lstrip('.')
+    return component or 'unknown'
 
 
 def file_name_key(name: str) -> str:
-    """*name* reduced to what the disk keeps of it, for comparing names:
+    """Return the legacy lossy comparison key, not a filesystem identity.
+
     ``'AC/DC'`` and ``'ACDC'`` give the same key, as do ``'*NSYNC'`` and
     ``'NSYNC'`` or ``'M.I.A.'`` and ``'M.I.A'``. Case and runs of spaces
     are ignored too.

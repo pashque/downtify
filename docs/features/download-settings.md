@@ -35,6 +35,8 @@ The YouTube path requests `bestaudio/best` and converts that stream using FFmpeg
 The exact available stream depends on the recording, authenticated account and extractor client. The original guide's roughly 128–160 kbps description is not a universal service limit: YouTube Music's official Premium high-quality setting supports up to 256 kbps AAC/Opus. Neither setting establishes what this downloader actually received. Historical input bitrate is unknown unless original stream metadata was retained. slskd can instead supply an existing native file, whose provenance/quality is a separate matter.
 :::
 
+When slskd's **Leave files in slskd** option is enabled, a matching provider file may be reused at its `slskd/...` virtual path without tagging or lyrics. The job is reported as reused, not newly acquired. Source artwork is not discarded: the file remains in slskd and is served from there. An explicit output-format request or album destination follows the separate-library-copy path instead.
+
 Release pages offer one download action: **Download album / single / EP** when the canonical release folder is empty, **Download full album / single / EP** when it is partial, and, on **Link pages only**, **Download album / single / EP again** when complete. Complete Library releases hide the header download action. Link releases verified locally also show the shared green Play button; files in playlists count independently of whether the canonical album folder is complete. Download labels wait for destination results instead of flashing a speculative action, and the shared round-arrow indicator spins while album or artist information is being updated. Completing a partial release queues only missing canonical-folder tracks; downloading again explicitly reacquires the full release. Track selection replaces that action with **Download selected (N)**. There is no automatic Download FLAC offer on downloaded albums or their track menus: converting a lossy source to FLAC cannot restore fidelity. Output-format settings and request-local format overrides remain supported without changing or deleting existing music.
 
 ## Output filename template
@@ -56,6 +58,8 @@ Available tokens:
 | `{album}` | Album name |
 | `{tracknumber}` | Track's position on its album, zero-padded to 2 digits (e.g. `01`, `12`). Empty when the source has no track number (e.g. a free-text/YouTube search result). |
 | `{year}` | Release year (e.g. `2025`). Empty when the source has no release date (e.g. a free-text/YouTube search result). |
+
+On Linux, source values in the download output template preserve valid punctuation, leading dots and whitespace (for example, `.hidden` remains `.hidden`); slash and NUL are removed. Standalone `.` and `..` components are protected against traversal. The separate `_sanitize` helper trims whitespace and strips leading dots when used for other filesystem names; source values in the download output template do not pass through it. Other filesystems may impose additional filename restrictions.
 
 The template can also include `/` to build subfolders. For example, to lay out a library as `Artist/Album (2025)/01 - Title.mp3` — handy when downloading a full discography, since each album lands in its own folder alongside its release year:
 
@@ -126,6 +130,8 @@ Changing this value in Settings takes effect immediately, including for the curr
 
 On by default, matching Downtify's historical behavior: every download runs through the pipeline (audio fetch, tagging, cover art, lyrics) and overwrites whatever file already sits at the computed output path.
 
+For an explicit redownload, Downtify stages the replacement and checks whether the destination changed before replacing it. This check is best-effort: a separate, uncooperative process can still change the destination between the final check and replacement. Missing-only publication instead uses atomic no-overwrite creation.
+
 ### What "again" actually means
 
 With it on, a re-download is a **completely fresh run**, not a repair of the existing file. Downtify does not look at what you already have: it searches your [audio sources](#audio-provider) in their configured order — so if slskd is first, slskd is tried first, not only as a fallback — fetches the audio from whichever source answers, and writes today's tags, cover art and lyrics onto it.
@@ -154,7 +160,7 @@ With it off, Downtify looks for the song **anywhere in the download folder**, no
 - any playlist's folder (playlist downloads, CSV imports, Playlist Monitor),
 - an artist/album folder, or the flat layout from before you turned *Organize by artist/album* on or off.
 
-A song counts as already downloaded when an audio file (`.mp3`, `.flac`, `.m4a`, `.ogg`, `.opus`) has the name the [output filename template](#output-filename-template) produces for it, compared case-insensitively. A leftover `.lrc` lyrics file alone doesn't count. If the template contains folders (e.g. `{artists}/{title}`), those folders must match too, so another artist's song with the same title isn't mistaken for this one. Because files don't carry a Spotify/YouTube track ID, matching is by name: a file you renamed, or one saved under a different filename template, won't be recognized.
+A song counts as already downloaded when an audio file (`.mp3`, `.flac`, `.m4a`, `.ogg`, `.opus`) has the name the [output filename template](#output-filename-template) produces for it, compared case-insensitively. A leftover `.lrc` lyrics file alone doesn't count. If the template contains folders (e.g. `{artists}/{title}`), those folders must match too, so another artist's song with the same title isn't mistaken for this one. Because files don't carry a Spotify/YouTube track ID, matching is by name: a file you renamed, or one saved under a different filename template, won't be recognized. Existing-copy checks also validate available tags and indexed source identity; missing tags are treated as unknown, not as a match. A conflicting known source ID makes the copy ineligible for reuse rather than authorizing an overwrite. Even a matching indexed source ID is provenance evidence only: it cannot prove that the file's audio is the requested recording. Legacy filenames/indexes are not automatically migrated.
 
 When a song is skipped:
 

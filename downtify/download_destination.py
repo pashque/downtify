@@ -2,6 +2,8 @@
 from pathlib import PurePosixPath
 from typing import Any, Optional
 
+from .library_catalog import AUDIO_EXTENSIONS
+
 
 def skip_existing_for(song: dict[str, Any], overwrite_default: bool) -> bool:
     """A UI action overrides overwrite for this request, never other jobs."""
@@ -25,8 +27,11 @@ def matches_destination(downloader: Any, song: dict[str, Any], stored: str,
     if not stored:
         return False
     expected = downloader.expected_stem_for(song, subdir)
-    actual = str(PurePosixPath(str(stored).replace('\\', '/')).with_suffix(''))
-    return actual.casefold() == expected.casefold()
+    stored_path = PurePosixPath(str(stored))
+    if stored_path.suffix.lower() not in AUDIO_EXTENSIONS:
+        return False
+    actual = str(stored_path.with_suffix(''))
+    return actual == expected
 
 
 def verified_destination_copy(downloader: Any, song: dict[str, Any],

@@ -24,19 +24,21 @@ from `upstream/main` and isolate one improvement with its regression tests;
 do not submit the entire customized snapshot as one pull request.
 Follow `CONTRIBUTING.md` and the existing build/test commands.
 
-The initial snapshot uses the sources of our naming-v69 deployment. Historical
-release validation recorded 3117 backend tests passed and 846 frontend tests
-passed (one skipped); these are historical results, not newly executed tests
-from publishing the fork. Upstream has advanced since the 3.7.0 base.
+The initial snapshot uses the sources of our naming-v69 deployment. Current
+baseline checks recorded 3163 backend tests passed, 846 frontend tests passed
+(one skipped), 15 documentation checks passed, and builds green. These results
+are baseline evidence, not a claim of full-file integrity or deployment
+verification. Upstream has advanced since the 3.7.0 base.
 
-A fresh focused run while preserving this snapshot returned 55 passed and
-8 failed across file naming, artist naming, folder storage, and partial M3U
-tests. Six failures are stale expectations that the shared file-name sanitizer
-preserves punctuation; the deployed shared sanitizer still uses upstream's
-stricter rule. Two artist tests expect superseded backslash escaping and
-legacy-file identity validation. These failures are recorded, not silently
-fixed or removed during a repository-backup task. The full suites were not
-rerun when publishing this snapshot.
+Linux download-template source values preserve valid punctuation, leading dots
+and whitespace; `.hidden` remains `.hidden` in download paths. Slash and NUL are
+removed, and standalone `.` and `..` components are protected against traversal.
+The separate `_sanitize` helper trims whitespace and strips leading dots when used
+for other filesystem names. Existing copies are accepted only after validation; conflicting known source IDs are
+refused rather than destructively reused. A recorded source ID is evidence
+about the file's indexed provenance, not proof that its audio is the requested
+recording. Missing tag values remain unknown rather than being guessed. There
+is no automatic migration of legacy filenames or indexes.
 
 ## Local checkout and private state
 

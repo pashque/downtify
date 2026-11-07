@@ -13,6 +13,19 @@ SONG = dict(song_id='format-test', source='deezer', name='Song', artists=['Artis
             release_date='2020', youtube_id='video', cover_url='cover', genre='Rock')
 
 
+def _write_valid_flac(path):
+    """Create a tiny, tagged FLAC fixture entirely offline with ffmpeg."""
+    import shutil
+    import subprocess
+
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg unavailable')
+    subprocess.run([
+        'ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2',
+        '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-y', str(path),
+    ], check=True)
+
+
 @pytest.mark.parametrize('fmt', ['mp3', 'flac', 'ogg', 'opus', 'm4a'])
 def test_request_format_hint_is_private_and_preserves_input(fmt):
     hints = dict(SONG, audioFormat=fmt)
@@ -69,7 +82,7 @@ def test_missing_override_skips_only_requested_format_at_destination(tmp_path, m
     song = dict(SONG, downtify_audio_format='flac', downtify_download_mode='missing')
     (tmp_path / 'Artist - Song.mp3').write_bytes(b'mp3')
     assert d.existing_filename_for(song) is None
-    (tmp_path / 'Artist - Song.flac').write_bytes(b'flac')
+    _write_valid_flac(tmp_path / 'Artist - Song.flac')
     monkeypatch.setattr(d, '_fetch_and_tag', lambda *a: pytest.fail('already present'))
     assert d.download(song) == 'Artist - Song.flac'
 
@@ -99,6 +112,34 @@ def test_api_does_not_reuse_wrong_format_destination(tmp_path, monkeypatch, comp
     assert asyncio.run(api._run_download(dict(SONG, downtify_audio_format='flac'), SONG['song_id'])) == 'Artist - Song.flac'
 
 
+@pytest.mark.parametrize('completed', [False, True])
+def test_api_rejects_contradictory_existing_mp3_without_acquiring_or_registering(tmp_path, monkeypatch, completed):
+    import shutil, subprocess
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg unavailable')
+    target = tmp_path / 'Artist - Song.mp3'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','sine=duration=0.2','-metadata','title=Wrong Song','-metadata','artist=Artist','-y',str(target)],check=True)
+    original = target.read_bytes()
+    d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=False)
+    monkeypatch.setattr(api.state, 'downloader', d)
+    monkeypatch.setattr(api.state, 'loop', None)
+    monkeypatch.setattr(api.state, 'track_index', None)
+    monkeypatch.setattr(api.state, 'download_semaphore', None)
+    monkeypatch.setattr(api.state, 'download_jobs', {SONG['song_id']: {'status':'done' if completed else 'queued','filename':target.name,'user_ids':set()}})
+    monkeypatch.setattr(api.state.connections, 'broadcast_job', AsyncMock())
+    acquired = []
+    monkeypatch.setattr(d, 'download', lambda *a, **k: acquired.append(True))
+    registered = AsyncMock()
+    monkeypatch.setattr(api, '_record_finished_download', registered)
+    with pytest.raises(RuntimeError, match='existing file'):
+        asyncio.run(api._run_download(dict(SONG, downtify_download_mode='missing'), SONG['song_id']))
+    assert api.state.download_jobs[SONG['song_id']]['status'] == 'error'
+    assert not acquired
+    registered.assert_not_awaited()
+    assert target.read_bytes() == original
+    assert api.state.download_jobs[SONG['song_id']]['status'] == 'error'
+
+
 def test_override_stages_away_from_existing_audio(tmp_path, monkeypatch):
     d = Downloader(tmp_path)
     original = tmp_path / 'Artist - Song.mp3'
@@ -125,6 +166,22 @@ def test_batch_applies_top_level_format_to_all_rows(tmp_path, monkeypatch):
     assert submit.call_args.args[0][0]['downtify_audio_format'] == 'flac'
 
 
+def test_api_indexed_explicit_format_copy_is_validated(tmp_path):
+    from unittest.mock import Mock
+
+    d = Downloader(tmp_path, folder_structure=True, overwrite_existing_files=False)
+    song = dict(SONG, downtify_audio_format='flac')
+    directory, _, stem = d._target_location(song, None)
+    target = directory / (stem + '.flac')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b'not audio')
+    stored = str(target.relative_to(tmp_path))
+    index = Mock()
+    index.source_copies_for_song.return_value = [stored]
+
+    with pytest.raises(RuntimeError, match='existing file'):
+        api._resolve_existing_format_download(d, song, track_index=index)
+
 def test_api_indexed_mp3_cannot_satisfy_flac_request(tmp_path, monkeypatch):
     from unittest.mock import Mock
     d = Downloader(tmp_path, folder_structure=True, overwrite_existing_files=False)
@@ -142,6 +199,56 @@ def test_api_indexed_mp3_cannot_satisfy_flac_request(tmp_path, monkeypatch):
     monkeypatch.setattr(api, '_record_finished_download', AsyncMock())
     monkeypatch.setattr(d, 'download', lambda *a, **kw: 'fresh.flac')
     assert asyncio.run(api._run_download(song, 'format-test')) == 'fresh.flac'
+
+
+@pytest.mark.parametrize('completed', [False, True])
+def test_api_rejects_different_indexed_source_before_reuse_or_owner_claim(
+    tmp_path, monkeypatch, completed,
+):
+    from downtify.track_index import TrackIndex
+
+    requested = dict(SONG, song_id='4uLU6hMCjMI75M1A2tKUQC', downtify_audio_format='mp3')
+    conflicting = '1x00000000000000000000'
+    d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=False)
+    target = tmp_path / 'Artist - Song.mp3'
+    subprocess = __import__('subprocess')
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.2',
+                    '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-y', str(target)], check=True)
+    original = target.read_bytes()
+    index = TrackIndex(tmp_path / 'index.db')
+    index.register_source_copy({'song_id': conflicting}, target.name, target)
+    monkeypatch.setattr(api.state, 'downloader', d)
+    monkeypatch.setattr(api.state, 'track_index', index)
+    monkeypatch.setattr(api.state, 'loop', None)
+    monkeypatch.setattr(api.state, 'download_semaphore', None)
+    monkeypatch.setattr(api.state, 'download_jobs', {
+        requested['song_id']: {'status': 'done' if completed else 'queued',
+                               'filename': target.name, 'user_ids': set()}})
+    monkeypatch.setattr(api.state.connections, 'broadcast_job', AsyncMock())
+    acquired = []
+    monkeypatch.setattr(d, 'download', lambda *a, **kw: acquired.append(True))
+    monkeypatch.setattr(api.state, 'track_owners', None)
+    with pytest.raises(RuntimeError, match='different source track'):
+        asyncio.run(api._run_download(requested, requested['song_id'], user_id=17))
+    assert not acquired
+    assert not api.state.track_owners
+    assert index.lookup(requested['song_id']) is None
+    assert index.source_copies_for_song({'song_id': conflicting}) == [target.name]
+    assert target.read_bytes() == original
+
+
+def test_api_explicit_format_matching_indexed_source_is_reusable(tmp_path):
+    from downtify.track_index import TrackIndex
+
+    song = dict(SONG, song_id='4uLU6hMCjMI75M1A2tKUQC', downtify_audio_format='mp3')
+    d = Downloader(tmp_path, folder_structure=False)
+    target = tmp_path / 'Artist - Song.mp3'
+    __import__('subprocess').run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.2',
+                                 '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-y', str(target)], check=True)
+    index = TrackIndex(tmp_path / 'index.db')
+    index.register_source_copy(song, target.name, target)
+    assert api._resolve_existing_format_download(d, song, track_index=index) == (
+        target.name, 'Already at destination')
 
 
 def test_album_endpoint_applies_audio_format(tmp_path, monkeypatch):
@@ -176,7 +283,7 @@ def test_private_yt_option_is_consumed_before_ytdlp(tmp_path, monkeypatch):
 def test_completed_format_job_elsewhere_does_not_skip_destination(tmp_path, monkeypatch):
     d = Downloader(tmp_path, overwrite_existing_files=False)
     (tmp_path / 'other').mkdir()
-    (tmp_path / 'other/Artist - Song.flac').write_bytes(b'flac')
+    _write_valid_flac(tmp_path / 'other/Artist - Song.flac')
     monkeypatch.setattr(api.state, 'downloader', d)
     monkeypatch.setattr(api.state, 'loop', None)
     monkeypatch.setattr(api.state, 'download_jobs', {'format-test': {
@@ -185,6 +292,43 @@ def test_completed_format_job_elsewhere_does_not_skip_destination(tmp_path, monk
     monkeypatch.setattr(api, '_run_download_locked', run)
     assert asyncio.run(api._run_download(dict(SONG, downtify_audio_format='flac'), 'format-test')) == 'Artist - Song.flac'
     run.assert_awaited_once()
+
+
+@pytest.mark.parametrize('payload', [b'corrupt', b'valid'])
+def test_completed_wrong_format_cache_is_not_validated_for_new_format(tmp_path, monkeypatch, payload):
+    d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=False)
+    cached = tmp_path / 'Artist - Song.mp3'
+    cached.write_bytes(payload)
+    monkeypatch.setattr(api.state, 'downloader', d)
+    monkeypatch.setattr(api.state, 'track_index', None)
+    monkeypatch.setattr(api.state, 'loop', None)
+    monkeypatch.setattr(api.state, 'download_semaphore', None)
+    monkeypatch.setattr(api.state, 'download_jobs', {'format-test': {
+        'status': 'done', 'filename': cached.name, 'user_ids': set()}})
+    monkeypatch.setattr(api, '_record_finished_download', AsyncMock())
+    monkeypatch.setattr(d, 'download', lambda *a, **kw: 'Artist - Song.flac')
+    assert asyncio.run(api._run_download(dict(SONG, downtify_audio_format='flac'), 'format-test')) == 'Artist - Song.flac'
+    assert cached.read_bytes() == payload
+
+
+def test_locked_download_preserves_exception_and_broadcasts_error(monkeypatch):
+    error = RuntimeError('download failed')
+    broadcast = AsyncMock()
+    monkeypatch.setattr(api.state, 'connections', type('C', (), {'broadcast_job': broadcast})())
+    job = {'user_ids': set(), 'status': 'downloading'}
+    async def fail(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(api.state, 'download_semaphore', None)
+    monkeypatch.setattr(api.state, 'downloader', object())
+    monkeypatch.setattr(api, '_resolve_existing_format_download', lambda *a, **kw: None)
+    monkeypatch.setattr(api, 'DOWNLOAD_EXECUTOR', None)
+    # Exercise the exception boundary with a failing executor-backed download.
+    class Loop:
+        async def run_in_executor(self, *args): raise error
+    with pytest.raises(RuntimeError, match='download failed'):
+        asyncio.run(api._run_download_locked(dict(SONG), 'format-test', job, Loop()))
+    assert job['status'] == 'error'
+    broadcast.assert_awaited()
 
 
 def test_existing_override_matches_uppercase_extension(tmp_path):

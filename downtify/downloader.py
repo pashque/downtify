@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import json
 import math
+import subprocess
 import os
 import re
 import shutil
@@ -34,6 +36,19 @@ from mutagen.mp4 import MP4, MP4Cover, MP4FreeForm
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from yt_dlp.postprocessor.ffmpeg import FFmpegExtractAudioPP
+
+
+class DownloadResult(str):
+    """String-compatible download path carrying acquisition provenance."""
+
+    acquired: bool
+    skipped: bool
+
+    def __new__(cls, filename: str, *, acquired: bool, skipped: bool = False):
+        value = super().__new__(cls, filename)
+        value.acquired = acquired
+        value.skipped = skipped
+        return value
 
 from . import lyrics as lyrics_mod
 from . import spotify as spotify_mod
@@ -843,13 +858,104 @@ class Downloader:
         with self._target_locks_guard:
             return self._target_locks.setdefault(key, threading.Lock())
 
+    def _validate_existing_copy(self, song: dict[str, Any], existing: str) -> None:
+        """Reject occupied exact destinations unless readable identity agrees."""
+        from mutagen import File as MutagenFile
+
+        candidate = Path(existing)
+        path = candidate if candidate.is_absolute() else self.download_dir / candidate
+        try:
+            roots = [self.download_dir.resolve(strict=True)]
+            slskd = str((getattr(self, 'slskd_settings', {}) or {}).get('source_dir') or '').strip()
+            if slskd and Path(slskd).is_dir():
+                roots.append(Path(slskd).resolve(strict=True))
+            resolved = path.resolve(strict=True)
+            if not any(resolved.is_relative_to(root) for root in roots) or not path.is_file():
+                raise ValueError('destination missing or outside authorized roots')
+            before = path.stat()
+            identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            audio = MutagenFile(str(path), easy=True)
+            if audio is None:
+                raise ValueError('unreadable audio')
+            # Mutagen may accept a parseable container/header without an audio
+            # payload. Probe only stream metadata: no decoding/rendering, with
+            # strict resource bounds. This establishes a readable audio stream,
+            # not that the entire recording is complete.
+            probe = subprocess.run(
+                [
+                    'ffprobe', '-v', 'error', '-select_streams', 'a:0',
+                    '-show_entries', 'stream=codec_name,duration:format=duration',
+                    '-of', 'json', '-probesize', '5M', '-analyzeduration', '5000000',
+                    str(path),
+                ],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            if probe.returncode != 0:
+                raise ValueError('ffprobe could not read audio stream')
+            result = json.loads(probe.stdout or '{}')
+            streams = result.get('streams') or []
+            if not streams or not str(streams[0].get('codec_name') or '').strip():
+                raise ValueError('no audio stream')
+            duration = 0.0
+            for candidate in (streams[0].get('duration'), (result.get('format') or {}).get('duration')):
+                try:
+                    parsed = float(candidate)
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(parsed) and parsed > 0:
+                    duration = parsed
+                    break
+            if duration <= 0:
+                raise ValueError('audio stream has no positive duration')
+            tags = getattr(audio, 'tags', None) or {}
+            expected_title = str(song.get('name') or '').strip().casefold()
+            expected_artists = [str(a).strip().casefold() for a in song.get('artists', []) if str(a).strip()]
+            title_values = tags.get('title') or []
+            artist_values = tags.get('artist') or []
+            title = str((title_values[0] if title_values else '') if isinstance(title_values, (list, tuple)) else title_values).strip().casefold()
+            artist = str((artist_values[0] if artist_values else '') if isinstance(artist_values, (list, tuple)) else artist_values).strip().casefold()
+            if title and expected_title and title != expected_title:
+                raise ValueError('title tag contradicts requested track')
+            # Structured credits are authoritative only when the stored ARTISTS
+            # list is complete and agrees with the joined display credit. Legacy
+            # arrays can be partial/malformed, so treat those as unknown rather
+            # than accepting a collaborator as the complete track identity.
+            structured_artists: list[str] = []
+            structured_known = False
+            if song.get('artists_structured') is True and expected_artists:
+                try:
+                    from .library_metadata import _structured_artists
+                    structured_artists = _structured_artists(path, audio)
+                    structured_known = (
+                        bool(structured_artists)
+                        and [a.strip().casefold() for a in structured_artists]
+                        == expected_artists
+                    )
+                except Exception:
+                    pass
+            joined = ', '.join(expected_artists).casefold()
+            if artist and expected_artists:
+                if structured_known:
+                    if artist != joined:
+                        raise ValueError('artist tag contradicts requested structured credits')
+                elif artist not in (joined, *expected_artists):
+                    raise ValueError('artist tag contradicts requested track')
+                elif len(expected_artists) > 1 and artist in expected_artists:
+                    # A single collaborator display tag cannot prove a full duo.
+                    raise ValueError('artist tag contains only one requested collaborator')
+            after = path.stat()
+            if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+                raise ValueError('file changed during validation')
+        except Exception as exc:
+            raise RuntimeError(f'existing file {existing!r} does not match requested track') from exc
+
     @staticmethod
     def _skip_existing(
         existing: str, progress_cb: Optional[ProgressCallback]
     ) -> str:
         logger.info('Skipping download, file already exists: {}', existing)
         _report(progress_cb, 100.0, 'Already downloaded')
-        return existing
+        return DownloadResult(existing, acquired=False)
 
     def _resolve_target_dir(self, subdir: Optional[str]) -> tuple[Path, str]:
         """Return ``(target_dir, relative_prefix)`` for an optional subdir.
@@ -894,9 +1000,11 @@ class Downloader:
         from .download_destination import skip_existing_for
         skip_existing = skip_existing_for(song, self.overwrite_existing_files)
         if skip_existing and self._can_resolve_path_early(song):
-            existing = self.find_existing_download(song, subdir)
-            if existing is not None:
-                return self._skip_existing(existing, progress_cb)
+            with self._target_lock(song, subdir):
+                existing = self.find_existing_download(song, subdir)
+                if existing is not None:
+                    self._validate_existing_copy(song, existing)
+                    return self._skip_existing(existing, progress_cb)
 
         # Known-long tracks are refused before any search or fetch.
         reject_overlong_song(song, self.max_track_duration_seconds)
@@ -948,18 +1056,16 @@ class Downloader:
                 with self._target_lock(song, subdir):
                     existing = self.find_existing_download(song, subdir)
                     if existing is not None:
+                        self._validate_existing_copy(song, existing)
                         return self._skip_existing(existing, progress_cb)
-                    return self._downloaded(
-                        song, self._finalize_local_source(
-                            song, local_source, provider, progress_cb, subdir
-                        ),
+                    stored = self._finalize_local_source(
+                        song, local_source, provider, progress_cb, subdir
                     )
-            return self._downloaded(
-                song,
-                self._finalize_local_source(
-                    song, local_source, provider, progress_cb, subdir
-                ),
+                    return self._local_source_result(song, local_source, provider, stored)
+            stored = self._finalize_local_source(
+                song, local_source, provider, progress_cb, subdir
             )
+            return self._local_source_result(song, local_source, provider, stored)
 
         if not skip_existing:
             return self._downloaded(
@@ -977,6 +1083,7 @@ class Downloader:
         with self._target_lock(song, subdir):
             existing = self.find_existing_download(song, subdir)
             if existing is not None:
+                self._validate_existing_copy(song, existing)
                 return self._skip_existing(existing, progress_cb)
             return self._downloaded(
                 song,
@@ -997,7 +1104,15 @@ class Downloader:
                 logger.opt(exception=True).warning(
                     'The after-download hook failed for {}', filename
                 )
-        return filename
+        return DownloadResult(filename, acquired=True)
+
+    def _local_source_result(self, song, source_path, provider, stored):
+        if (provider == 'slskd' and self.slskd_settings.get('leave_in_place', True)
+                and not song.get('downtify_audio_format')
+                and song.get('downtify_destination') != 'album'
+                and str(stored).startswith('slskd/')):
+            return DownloadResult(stored, acquired=False, skipped=True)
+        return self._downloaded(song, stored)
 
     def _target_location(
         self, song: dict[str, Any], subdir: Optional[str]
@@ -1095,6 +1210,15 @@ class Downloader:
                                                    progress_cb, subdir)
 
         lookups = _MetadataLookups(self, song)
+        if (provider == 'slskd' and self.slskd_settings.get('leave_in_place', True)
+                and not requested_format
+                and song.get('downtify_destination') != 'album'):
+            stored = library_stored_path(
+                source_path, self.download_dir, slskd_dir_from_downloader(self)
+            )
+            lookups.cancel()
+            _report(progress_cb, 100.0, 'Reused', provider)
+            return stored
         try:
             if (song.get('downtify_destination') != 'album'
                     and not requested_format
@@ -1113,12 +1237,55 @@ class Downloader:
                 target_dir, rel_prefix, basename = self._target_location(
                     song, subdir
                 )
+                target_dir.mkdir(parents=True, exist_ok=True)
                 suffix = source_path.suffix or f'.{self.audio_format}'
                 final_path = target_dir / f'{basename}{suffix}'
-                if source_path.resolve() != final_path.resolve():
-                    shutil.copy2(source_path, final_path)
+                in_place = source_path.resolve() == final_path.resolve()
+                redownload = song.get('downtify_download_mode') == 'redownload'
+                observed = None
+                if redownload and not in_place:
+                    try:
+                        observed = final_path.lstat()
+                    except FileNotFoundError:
+                        pass
+                staged_path = None
+                if not in_place:
+                    import tempfile
+                    fd, staged_name = tempfile.mkstemp(
+                        prefix='.downtify-local-', suffix=suffix, dir=target_dir
+                    )
+                    os.close(fd)
+                    staged_path = Path(staged_name)
+                    try:
+                        shutil.copy2(source_path, staged_path)
+                        found = lookups.collect()
+                        self._tag_file(staged_path, target_dir, song, found)
+                        if redownload:
+                            try:
+                                current = final_path.lstat()
+                            except FileNotFoundError:
+                                current = None
+                            if observed is None:
+                                os.link(staged_path, final_path)
+                                stored = f'{rel_prefix}{final_path.name}'
+                                _report(progress_cb, 100.0, 'Done', provider)
+                                return stored
+                            if (current is None or current.st_dev != observed.st_dev
+                                    or current.st_ino != observed.st_ino
+                                    or current.st_size != observed.st_size
+                                    or current.st_mtime_ns != observed.st_mtime_ns):
+                                raise RuntimeError(
+                                    f'Destination changed during redownload: {final_path}'
+                                )
+                            os.replace(staged_path, final_path)
+                        else:
+                            os.link(staged_path, final_path)
+                        stored = f'{rel_prefix}{final_path.name}'
+                    finally:
+                        staged_path.unlink(missing_ok=True)
+                    _report(progress_cb, 100.0, 'Done', provider)
+                    return stored
                 stored = f'{rel_prefix}{final_path.name}'
-                in_place = False
             found = lookups.collect()
         finally:
             lookups.cancel()
@@ -1296,11 +1463,25 @@ class Downloader:
         """Isolate conversions and validate automatic matches before publishing."""
         fmt = audio_format or song.get('downtify_audio_format') or self.audio_format
         expected_duration = self._automatic_target_duration(song)
-        if not song.get('downtify_audio_format') and expected_duration is None:
+        from .download_destination import skip_existing_for
+        missing_only = skip_existing_for(song, self.overwrite_existing_files)
+        if (not missing_only and not song.get('downtify_audio_format')
+                and expected_duration is None):
             return self._fetch_audio(video_id, target_dir, basename, song=song,
                                      progress_cb=progress_cb, provider=provider,
                                      audio_format=audio_format)
         from tempfile import TemporaryDirectory
+        destination = target_dir / f'{basename}.{fmt}'
+        redownload = song.get('downtify_download_mode') == 'redownload'
+        # Redownload authorizes replacement only of the exact path object
+        # observed before acquisition. Absence is published with link(2),
+        # which is atomic and fails if any writer creates the path meanwhile.
+        observed = None
+        if redownload:
+            try:
+                observed = destination.lstat()
+            except FileNotFoundError:
+                pass
         with TemporaryDirectory(prefix='.downtify-audio-', dir=target_dir) as staging:
             produced = self._fetch_audio(video_id, Path(staging), basename, song=song,
                                          progress_cb=progress_cb, provider=provider,
@@ -1310,8 +1491,29 @@ class Downloader:
                 raise RuntimeError(f'Audio conversion did not produce requested {fmt} output')
             if expected_duration is not None:
                 self._validate_audio_duration(expected, expected_duration)
-            destination = target_dir / expected.name
-            os.replace(expected, destination)
+            if skip_existing_for(song, self.overwrite_existing_files):
+                # A hard link publishes atomically without replacing a path
+                # created after the initial missing-only check.
+                os.link(expected, destination)
+                expected.unlink()
+            else:
+                if redownload:
+                    try:
+                        current = destination.lstat()
+                    except FileNotFoundError:
+                        current = None
+                    if observed is None:
+                        os.link(expected, destination)
+                        expected.unlink()
+                        return destination
+                    if (current is None or current.st_dev != observed.st_dev
+                            or current.st_ino != observed.st_ino
+                            or current.st_size != observed.st_size
+                            or current.st_mtime_ns != observed.st_mtime_ns):
+                        raise RuntimeError(
+                            f'Destination changed during redownload: {destination}'
+                        )
+                os.replace(expected, destination)
             return destination
 
     def _fetch_audio(

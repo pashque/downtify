@@ -3971,18 +3971,53 @@ async def _run_download(
             from .download_destination import matches_destination
             if (song.get('downtify_download_mode') != 'redownload'
                     and job.get('status') == 'done' and job.get('filename')
-                    and (not song.get('downtify_audio_format')
-                         or _resolve_existing_format_download(
-                             state.downloader, song, subdir=subdir,
-                             track_index=state.track_index) == (job['filename'], 'Already at destination'))
                     and matches_destination(state.downloader, song, job['filename'], subdir)):
-                sharers = _job_users(job)
-                if sharers:
-                    await asyncio.to_thread(
-                        _note_download_owners,
-                        job['filename'],
-                        sharers,
+                # Completed-job reuse is a file reuse boundary too: validate before
+                # granting ownership or returning the cached result.
+                requested_format = song.get('downtify_audio_format')
+                cached_path = Path(job['filename'])
+                cached_has_requested_format = (
+                    not requested_format or cached_path.suffix.lower() == f'.{requested_format}'
+                )
+                if not cached_has_requested_format:
+                    return await _run_download_locked(
+                        song, song_id, job, loop, subdir=subdir,
+                        delay_seconds=delay_seconds, playlist_name=playlist_name,
+                        spotify_playlist_id=spotify_playlist_id, track_order=track_order,
+                        refresh_playlists=refresh_playlists, user_id=user_id,
                     )
+                try:
+                    if state.track_index is not None:
+                        cached_full = locate_library_file(
+                            job['filename'], Path(state.downloader.download_dir),
+                            slskd_dir_from_downloader(state.downloader))
+                        if cached_full is not None:
+                            state.track_index.validate_source_identity(
+                                song, job['filename'], cached_full)
+                    await asyncio.to_thread(
+                        state.downloader._validate_existing_copy, song, job['filename']
+                    )
+                except Exception as exc:
+                    message = f'Error: {exc}'
+                    logger.warning('Completed download validation failed for {}: {}', song_id, exc)
+                    job.update(status='error', message=message, progress=0)
+                    await state.connections.broadcast_job(
+                        _job_users(job),
+                        {'song': song, 'progress': 0, 'message': message, 'status': 'error'},
+                    )
+                    raise
+                if (song.get('downtify_audio_format')
+                        and _resolve_existing_format_download(
+                            state.downloader, song, subdir=subdir,
+                            track_index=state.track_index) != (job['filename'], 'Already at destination')):
+                    return await _run_download_locked(
+                        song, song_id, job, loop, subdir=subdir,
+                        delay_seconds=delay_seconds, playlist_name=playlist_name,
+                        spotify_playlist_id=spotify_playlist_id, track_order=track_order,
+                        refresh_playlists=refresh_playlists, user_id=user_id,
+                    )
+                # Reusing an already-completed file is not an acquisition by
+                # this request; its previous owners/provenance remain unchanged.
                 return job['filename']
             return await _run_download_locked(
                 song,
@@ -4012,13 +4047,32 @@ def _resolve_existing_format_download(
         return resolve_existing_download(downloader, song, subdir=subdir, track_index=track_index)
     local = downloader.existing_filename_for(song, subdir=subdir)
     if local:
+        if track_index is not None:
+            full = locate_library_file(local, Path(downloader.download_dir), slskd_dir_from_downloader(downloader))
+            if full is not None:
+                track_index.validate_source_identity(song, local, full)
+        downloader._validate_existing_copy(song, local)
         return local, 'Already at destination'
     parent = Path(downloader.expected_stem_for(song, subdir)).parent
     for stored in track_index.source_copies_for_song(song) if track_index is not None else []:
         path = Path(stored)
         if (path.parent == parent and path.suffix.lower() == '.' + fmt
-                and locate_library_file(stored, Path(downloader.download_dir),
-                                        slskd_dir_from_downloader(downloader))):
+                and (full := locate_library_file(
+                    stored, Path(downloader.download_dir),
+                    slskd_dir_from_downloader(downloader))) is not None):
+            physical = full.resolve(strict=True)
+            download_root = Path(downloader.download_dir).resolve(strict=True)
+            try:
+                physical.relative_to(download_root)
+                authorized_copy = str(physical.relative_to(download_root))
+            except ValueError:
+                slskd_root = slskd_dir_from_downloader(downloader)
+                if slskd_root is None or not physical.is_relative_to(slskd_root.resolve(strict=True)):
+                    continue
+                authorized_copy = str(physical)
+            downloader._validate_existing_copy(song, authorized_copy)
+            if track_index is not None:
+                track_index.validate_source_identity(song, stored, full)
             return stored, 'Already at destination'
     return None
 
@@ -4072,13 +4126,6 @@ async def _run_download_locked(
                         progress=100,
                         message=skip_message,
                     )
-                    sharers = _job_users(job)
-                    if sharers:
-                        # The file is shared, the ownership isn't:
-                        # everyone waiting on this job asked for it too.
-                        await asyncio.to_thread(
-                            _note_download_owners, existing, sharers
-                        )
                     await state.connections.broadcast_job(
                         _job_users(job),
                         {
@@ -4133,10 +4180,12 @@ async def _run_download_locked(
                     song, progress, subdir=subdir
                 ),
             )
+            acquired = getattr(filename, 'acquired', True)
+            filename = str(filename)
             job['status'] = 'done'
             job['filename'] = filename
             job['progress'] = 100
-            if filename:
+            if filename and acquired:
                 await _record_finished_download(
                     song,
                     filename,

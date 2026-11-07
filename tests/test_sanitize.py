@@ -7,9 +7,13 @@ import pytest
 from downtify.downloader import _sanitize
 
 
-@pytest.mark.parametrize('char', list(r'\/:*?"<>|'))
-def test_sanitize_removes_filesystem_unsafe_chars(char):
-    assert char not in _sanitize(f'name{char}test')
+@pytest.mark.parametrize('char', list(r'\:*?"<>|'))
+def test_sanitize_preserves_linux_valid_punctuation(char):
+    assert _sanitize(f'name{char}test') == f'name{char}test'
+
+
+def test_sanitize_removes_slash():
+    assert _sanitize('name/test') == 'nametest'
 
 
 def test_sanitize_normal_string_unchanged():
@@ -32,12 +36,12 @@ def test_sanitize_strips_leading_dot():
     assert _sanitize('.hidden') == 'hidden'
 
 
-def test_sanitize_strips_trailing_dot():
-    assert _sanitize('file.') == 'file'
+def test_sanitize_preserves_trailing_dot():
+    assert _sanitize('file.') == 'file.'
 
 
-def test_sanitize_all_unsafe_returns_unknown():
-    assert _sanitize('???') == 'unknown'
+def test_sanitize_only_removed_characters_returns_unknown():
+    assert _sanitize('/\x00') == 'unknown'
 
 
 def test_sanitize_control_chars_removed():

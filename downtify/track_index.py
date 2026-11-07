@@ -132,6 +132,50 @@ class TrackIndex:
                 pass
         return found
 
+    def validated_source_copy_ids(self, filename: str) -> set[str]:
+        """Return IDs from unchanged, stat-validated source-copy rows only."""
+        with self._connect() as conn:
+            rows = conn.execute('SELECT * FROM library_source_copies WHERE filename=?', (filename,)).fetchall()
+        result: set[str] = set()
+        for row in rows:
+            try:
+                path = Path(row['full_path'])
+                stat = path.stat()
+                if path.is_file() and (stat.st_size, stat.st_mtime_ns) == (row['size'], row['mtime_ns']):
+                    result.add(str(row['spotify_track_id']))
+            except OSError:
+                pass
+        return result
+
+    def validated_source_copy_ids_for_path(self, full_path: Path) -> set[str]:
+        """Return stat-valid identities attached to this resolved physical path."""
+        path = Path(full_path)
+        try:
+            resolved = str(path.resolve(strict=True))
+            stat = path.stat()
+        except OSError:
+            return set()
+        with self._connect() as conn:
+            rows = conn.execute(
+                'SELECT spotify_track_id, size, mtime_ns FROM library_source_copies WHERE full_path=?',
+                (resolved,),
+            ).fetchall()
+        if not path.is_file():
+            return set()
+        return {str(row['spotify_track_id']) for row in rows
+                if (stat.st_size, stat.st_mtime_ns) == (row['size'], row['mtime_ns'])}
+
+    def validate_source_identity(self, song: dict[str, Any], filename: str,
+                                 full_path: Path) -> None:
+        """Reject conflicting provenance for this unchanged physical file."""
+        requested = normalize_spotify_track_id(song)
+        if not requested:
+            return
+        path = Path(full_path)
+        known = self.validated_source_copy_ids_for_path(path)
+        if known and requested not in known:
+            raise RuntimeError(f'Existing file {filename!r} is indexed to a different source track')
+
     def identities_for_files(self, filenames: set[str]) -> dict[str, set[str]]:
         """Batch reverse provenance, including stat-validated recovered copies.
 
@@ -368,34 +412,82 @@ def resolve_existing_download(
 
     from .download_destination import managed_destination
 
+    def has_source_conflict(local: str, full_path: Path, requested_id: Optional[str]) -> bool:
+        if track_index is None:
+            return False
+        if requested_id is None:
+            return bool(track_index.validated_source_copy_ids_for_path(full_path))
+        try:
+            track_index.validate_source_identity({'song_id': requested_id}, local, full_path)
+        except RuntimeError:
+            return True
+        return False
+
+    def validate_existing(local: str, full_path: Path) -> None:
+        validator = getattr(downloader, '_validate_existing_copy', None)
+        if not callable(validator):
+            raise RuntimeError('existing file cannot be accepted without a validator')
+        # Validate the resolved physical file, including authorized slskd paths.
+        physical = full_path.resolve(strict=True)
+        try:
+            physical.relative_to(download_dir.resolve(strict=True))
+            validator(song, local)
+        except ValueError:
+            slskd_root = slskd_dir.resolve(strict=True) if slskd_dir and slskd_dir.exists() else None
+            if slskd_root is None:
+                raise RuntimeError('existing file is outside authorized roots')
+            try:
+                physical.relative_to(slskd_root)
+            except ValueError as exc:
+                raise RuntimeError('existing file is outside authorized roots') from exc
+            validator(song, str(physical))
+
+    def has_trustworthy_source_evidence(full_path: Path, requested_id: Optional[str]) -> bool:
+        if track_index is None or requested_id is None:
+            return False
+        return requested_id in track_index.validated_source_copy_ids_for_path(full_path)
+
     if managed_destination(downloader) or song.get('downtify_destination') == 'album':
         from .download_destination import verified_destination_copy
         local = (downloader.existing_filename_for(song, subdir=subdir)
                  or verified_destination_copy(downloader, song, subdir, track_index))
-        if local and locate_library_file(local, download_dir, slskd_dir):
-            if track_index is not None:
-                track_index.register_song(song, local, full_path=locate_library_file(local, download_dir, slskd_dir))
-            return local, 'Already at destination'
+        if local:
+            full = locate_library_file(local, download_dir, slskd_dir)
+            if full is not None:
+                if has_source_conflict(local, full, normalize_spotify_track_id(song)):
+                    return None
+                validate_existing(local, full)
+                if has_trustworthy_source_evidence(full, normalize_spotify_track_id(song)):
+                    assert track_index is not None
+                    track_index.register_song(song, local, full_path=full)
+                return local, 'Already at destination'
         # A valid indexed copy elsewhere must remain indexed, but must not
         # suppress a missing destination in an album or a separate playlist.
         return None
 
+    tid = normalize_spotify_track_id(song)
     if track_index is not None:
-        tid = normalize_spotify_track_id(song)
         if tid:
             canonical = track_index.lookup(tid)
             if canonical:
-                if locate_library_file(canonical, download_dir, slskd_dir):
+                full = locate_library_file(canonical, download_dir, slskd_dir)
+                if full is not None:
+                    if has_source_conflict(canonical, full, tid):
+                        return None
+                    validate_existing(canonical, full)
                     return canonical, 'Already in library'
                 track_index.forget(tid)
 
     local = downloader.existing_filename_for(song, subdir=subdir)
-    if local and locate_library_file(local, download_dir, slskd_dir):
-        if track_index is not None:
-            full = locate_library_file(local, download_dir, slskd_dir)
-            track_index.register_song(
-                song, local, full_path=full if full is not None else None
-            )
-        return local, 'Already on disk'
+    if local:
+        full = locate_library_file(local, download_dir, slskd_dir)
+        if full is not None:
+            if has_source_conflict(local, full, tid):
+                return None
+            validate_existing(local, full)
+            if has_trustworthy_source_evidence(full, tid):
+                assert track_index is not None
+                track_index.register_song(song, local, full_path=full)
+            return local, 'Already on disk'
 
     return None

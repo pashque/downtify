@@ -4,13 +4,37 @@ that already exist on disk or in the track index."""
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from unittest.mock import AsyncMock, MagicMock
 
 from downtify import api
-from downtify.downloader import Downloader
+from downtify.downloader import DownloadResult, Downloader
 from downtify.track_index import TrackIndex
 
 SPOTIFY_ID = '4uLU6hMCjMI75M1A2tKUQC'
+
+
+def test_download_result_preserves_string_contract_and_provenance():
+    skipped = DownloadResult('existing.mp3', acquired=False)
+    acquired = DownloadResult('new.mp3', acquired=True)
+
+    assert isinstance(skipped, str)
+    assert skipped == 'existing.mp3'
+    assert skipped.acquired is False
+    assert acquired.acquired is True
+
+
+def _write_audio(path, title='Track', artist='Artist'):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            'ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+            'sine=frequency=440:duration=0.2', '-metadata', f'title={title}',
+            '-metadata', f'artist={artist}', '-codec:a', 'libmp3lame',
+            '-q:a', '9', '-y', str(path),
+        ],
+        check=True,
+    )
 
 
 def _run_download(coro):
@@ -32,8 +56,7 @@ def test_run_download_skips_when_matching_file_exists(tmp_path):
     )
     song = {'name': 'Track', 'artists': ['Artist']}
     target = download_dir / 'Artist - Track.mp3'
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(b'fake')
+    _write_audio(target)
 
     d.download = MagicMock(side_effect=AssertionError('must not download'))
 
@@ -69,8 +92,7 @@ def test_run_download_skips_via_global_library(tmp_path):
         overwrite_existing_files=False,
     )
     other = download_dir / 'Other Playlist' / 'Artist - Track.mp3'
-    other.parent.mkdir(parents=True)
-    other.write_bytes(b'x' * 100)
+    _write_audio(other)
 
     library = TrackIndex(tmp_path / 'library.db')
     library.register(SPOTIFY_ID, 'Other Playlist/Artist - Track.mp3')
@@ -122,8 +144,7 @@ def test_run_download_skips_in_playlist_subdir(tmp_path):
     song = {'name': 'Track', 'artists': ['Artist']}
     pl_dir = download_dir / 'My Playlist'
     target = pl_dir / 'Artist - Track.mp3'
-    pl_dir.mkdir(parents=True)
-    target.write_bytes(b'fake')
+    _write_audio(target)
 
     d.download = MagicMock(side_effect=AssertionError('must not download'))
 
@@ -156,8 +177,7 @@ def test_run_download_redownloads_existing_file_when_overwrite_is_on(tmp_path):
     download_dir = tmp_path / 'music'
     d = Downloader(download_dir, audio_format='mp3')
     target = download_dir / 'Artist - Track.mp3'
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(b'fake')
+    _write_audio(target)
     d.download = MagicMock(return_value='Artist - Track.mp3')
 
     prev_downloader = api.state.downloader

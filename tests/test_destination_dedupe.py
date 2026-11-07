@@ -11,7 +11,9 @@ SONG = dict(song_id='5fHrHoJKfCgBd35zwIBmUK', source='spotify', name='D4L', arti
 def setup_playlist(tmp_path, structured=True):
     d=Downloader(tmp_path/'downloads', output_template=FULL if structured else '{artists} - {title}', folder_structure=structured, playlist_use_library=not structured, overwrite_existing_files=False)
     target,prefix,name=d._target_location(SONG,'My Playlist')
-    old=target/(name+'.mp3');old.write_bytes(b'playlist audio fixture')
+    old=target/(name+'.mp3')
+    import subprocess
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','anullsrc=r=44100:cl=stereo','-t','0.1','-q:a','9',str(old)], check=True)
     index=TrackIndex(tmp_path/'index.db');index.register_song(SONG,prefix+old.name,full_path=old)
     return d,index,old
 
@@ -46,10 +48,12 @@ def test_legacy_collision_with_wrong_tagged_artist_does_not_satisfy_album(tmp_pa
     mp3.tags.add(TPE2(encoding=3,text='Fred again..'))
     mp3.tags.add(TALB(encoding=3,text='Actual album'))
     mp3.save(str(legacy))
+    original = legacy.read_bytes()
     assert d.existing_filename_for(song) is None
+    assert legacy.read_bytes() == original
 
 
-def test_legacy_sanitized_artist_folder_satisfies_album_request(tmp_path):
+def test_legacy_sanitized_artist_folder_is_not_looked_up(tmp_path):
     d = Downloader(tmp_path/'downloads', output_template=FULL, folder_structure=True,
                    playlist_use_library=True, overwrite_existing_files=False)
     song = {**SONG, 'album_artist': 'Fred again..', 'artists': ['Fred again..']}
@@ -67,10 +71,12 @@ def test_legacy_sanitized_artist_folder_satisfies_album_request(tmp_path):
     mp3.tags.add(TPE2(encoding=3,text='Fred again..'))
     mp3.tags.add(TALB(encoding=3,text='Dark Lane Demo Tapes'))
     mp3.save(str(legacy))
-    assert d.existing_filename_for(song) == 'Fred again/Fred again - Dark Lane Demo Tapes (2020)/09. Fred again - D4L.mp3'
+    original = legacy.read_bytes()
+    assert d.existing_filename_for(song) is None
+    assert legacy.read_bytes() == original
 
 
-def test_legacy_sanitized_artist_filename_in_playlist_destination(tmp_path):
+def test_legacy_sanitized_artist_filename_is_not_looked_up_in_playlist_destination(tmp_path):
     d = Downloader(tmp_path/'downloads', output_template=FULL, folder_structure=True,
                    playlist_use_library=False, overwrite_existing_files=False)
     song = {**SONG, 'album_artist': 'Fred again..', 'artists': ['Fred again..']}
@@ -86,7 +92,9 @@ def test_legacy_sanitized_artist_filename_in_playlist_destination(tmp_path):
     mp3.tags.add(TIT2(encoding=3,text='D4L'))
     mp3.tags.add(TPE1(encoding=3,text='Fred again..'))
     mp3.save(str(legacy))
-    assert d.existing_filename_for(song, 'My Playlist') == 'My Playlist/Fred again - D4L.mp3'
+    original = legacy.read_bytes()
+    assert d.existing_filename_for(song, 'My Playlist') is None
+    assert legacy.read_bytes() == original
 
 
 def test_corrected_destination_wins_over_legacy_copy(tmp_path):

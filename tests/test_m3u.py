@@ -16,8 +16,8 @@ def test_sanitize_keeps_allowed_chars():
     )
 
 
-def test_sanitize_strips_filesystem_unsafe_chars():
-    assert m3u.sanitize_playlist_name('a/b\\c:d*e?f"g<h>i|j') == 'abcdefghij'
+def test_sanitize_removes_literal_slash_and_preserves_linux_punctuation():
+    assert m3u.sanitize_playlist_name('a/b\\c:d*e?f"g<h>i|j') == 'ab\\c:d*e?f"g<h>i|j'
 
 
 def test_sanitize_keeps_unicode_letters():
@@ -35,7 +35,7 @@ def test_sanitize_keeps_punctuation_and_emoji():
 
 def test_sanitize_empty_input_falls_back_to_default():
     assert m3u.sanitize_playlist_name('') == 'playlist'
-    assert m3u.sanitize_playlist_name('***') == 'playlist'
+    assert m3u.sanitize_playlist_name('***') == '***'
     assert m3u.sanitize_playlist_name('   ') == 'playlist'
 
 
@@ -235,13 +235,13 @@ def test_write_writes_under_playlists_subdir(tmp_path):
     assert kept == 1
 
 
-def test_write_sanitises_playlist_name_in_filename(tmp_path):
+def test_write_removes_literal_slash_from_playlist_filename(tmp_path):
     _touch(tmp_path, 'a.mp3')
     target, _ = m3u.write_m3u(
         tmp_path, 'Bad/Name:Here?', [{'filename': 'a.mp3'}]
     )
     assert target is not None
-    assert target.name == 'BadNameHere.m3u'
+    assert target.name == 'BadName:Here?.m3u'
 
 
 def test_write_returns_none_when_no_files_resolve(tmp_path):
