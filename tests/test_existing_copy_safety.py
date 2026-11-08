@@ -2,7 +2,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import mutagen
 import pytest
+from mutagen import File as MutagenFile
+from mutagen.id3 import ID3, TXXX
 
 from downtify.downloader import Downloader
 
@@ -67,7 +70,6 @@ def test_direct_validation_rejects_missing_path(tmp_path):
 def test_readable_file_without_tags_is_not_a_contradiction(tmp_path):
     target = tmp_path / 'untagged.mp3'
     mp3(target)
-    from mutagen import File as MutagenFile
     audio = MutagenFile(str(target), easy=True)
     audio.delete()
     audio.save()
@@ -108,7 +110,6 @@ def test_symlink_escape_is_rejected(tmp_path):
 def test_change_during_validation_is_rejected(tmp_path, monkeypatch):
     target = tmp_path / 'changing.mp3'
     mp3(target)
-    import mutagen
     original = mutagen.File
 
     def mutate(*args, **kwargs):
@@ -132,7 +133,6 @@ def test_truncated_after_valid_mp3_tags_is_rejected(tmp_path):
 
 
 def test_structured_collaboration_credit_requires_complete_joined_match(tmp_path):
-    from mutagen.id3 import ID3, TXXX
     target = tmp_path / 'collab.mp3'
     mp3(target, artist='Artist One')
     tags = ID3(str(target))
@@ -144,7 +144,6 @@ def test_structured_collaboration_credit_requires_complete_joined_match(tmp_path
 
 
 def test_structured_literal_comma_artist_is_not_split_or_partial_match(tmp_path):
-    from mutagen.id3 import ID3, TXXX
     target = tmp_path / 'comma.mp3'
     mp3(target, artist='Earth, Wind & Fire')
     tags = ID3(str(target))

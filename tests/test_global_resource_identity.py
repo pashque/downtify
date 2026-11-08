@@ -1,4 +1,4 @@
-from downtify import discover, external_library
+from downtify import deezer, discover, external_library
 
 
 def test_discovery_preserves_symbol_artists_and_distinct_release_titles():
@@ -18,7 +18,6 @@ def test_external_identity_cannot_substitute_symbol_artist_or_version():
 
 
 def test_preview_never_uses_another_punctuation_artist(monkeypatch):
-    from downtify import deezer
 
     class Response:
         def raise_for_status(self): pass
@@ -28,7 +27,6 @@ def test_preview_never_uses_another_punctuation_artist(monkeypatch):
 
 
 def test_symbol_only_deezer_name_is_valid(monkeypatch):
-    from downtify import deezer
 
     class Response:
         def raise_for_status(self): pass

@@ -1,7 +1,7 @@
 """Real-library cases that previously stayed local-only (Her Loss, EP suffixes, deluxe order)."""
 import pytest
 
-from downtify import spotify
+from downtify import album_source, spotify
 from downtify.album_source import resolve_album_source
 from downtify.track_index import TrackIndex
 
@@ -9,7 +9,6 @@ from downtify.track_index import TrackIndex
 @pytest.fixture(autouse=True)
 def _strict_layer_only(monkeypatch):
     # Exact layer only; the search fallback is in test_album_source_loose.py.
-    from downtify import album_source
     monkeypatch.setattr(album_source, '_loose_versions', lambda *a, **k: [])
 
 

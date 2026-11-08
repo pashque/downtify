@@ -4006,26 +4006,7 @@ async def _run_download(
                         spotify_playlist_id=spotify_playlist_id, track_order=track_order,
                         refresh_playlists=refresh_playlists, user_id=user_id,
                     )
-                try:
-                    if state.track_index is not None:
-                        cached_full = locate_library_file(
-                            job['filename'], Path(state.downloader.download_dir),
-                            slskd_dir_from_downloader(state.downloader))
-                        if cached_full is not None:
-                            state.track_index.validate_source_identity(
-                                song, job['filename'], cached_full)
-                    await asyncio.to_thread(
-                        state.downloader._validate_existing_copy, song, job['filename']
-                    )
-                except Exception as exc:
-                    message = f'Error: {exc}'
-                    logger.warning('Completed download validation failed for {}: {}', song_id, exc)
-                    job.update(status='error', message=message, progress=0)
-                    await state.connections.broadcast_job(
-                        _job_users(job),
-                        {'song': song, 'progress': 0, 'message': message, 'status': 'error'},
-                    )
-                    raise
+                await _validate_cached_download(song, song_id, job)
                 if (song.get('downtify_audio_format')
                         and _resolve_existing_format_download(
                             state.downloader, song, subdir=subdir,
@@ -4055,6 +4036,30 @@ async def _run_download(
     finally:
         if not lock.locked():
             _download_locks.pop(song_id, None)
+
+
+async def _validate_cached_download(song: dict[str, Any], song_id: str, job: dict[str, Any]) -> None:
+    """Validate a completed job's file before reuse; mark the job failed and re-raise."""
+    try:
+        if state.track_index is not None:
+            cached_full = locate_library_file(
+                job['filename'], Path(state.downloader.download_dir),
+                slskd_dir_from_downloader(state.downloader))
+            if cached_full is not None:
+                state.track_index.validate_source_identity(
+                    song, job['filename'], cached_full)
+        await asyncio.to_thread(
+            state.downloader._validate_existing_copy, song, job['filename']
+        )
+    except Exception as exc:
+        message = f'Error: {exc}'
+        logger.warning('Completed download validation failed for {}: {}', song_id, exc)
+        job.update(status='error', message=message, progress=0)
+        await state.connections.broadcast_job(
+            _job_users(job),
+            {'song': song, 'progress': 0, 'message': message, 'status': 'error'},
+        )
+        raise
 
 
 def _resolve_existing_format_download(

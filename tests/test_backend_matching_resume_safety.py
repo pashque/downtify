@@ -2,7 +2,7 @@
 import pytest
 
 from downtify import library_catalog as catalog
-from downtify import providers
+from downtify import library_sync, providers
 
 
 @pytest.mark.parametrize('name', ['|', '||', '!!!'])
@@ -60,7 +60,6 @@ def test_official_audio_swap_does_not_revive_negative_variant(monkeypatch):
 
 
 def test_mobile_structured_object_credits_keep_boundaries():
-    from downtify import library_sync
     row = library_sync.public_row({'artist': 'Flattened, Guest', 'artists': [{'name': 'Earth, Wind & Fire', 'id': 'a'}, {'name': 'Guest'}]})
     assert row['artists'] == ['Earth, Wind & Fire', 'Guest']
     assert row['album_artist'] == 'Earth, Wind & Fire'

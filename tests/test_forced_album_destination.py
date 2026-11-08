@@ -1,12 +1,17 @@
 """Forced album requests never mutate shared storage policy."""
+import asyncio
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import AsyncMock
 
 import pytest
 
 from downtify import api
+from downtify import downloader as module
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download
+from tests.test_artist_top_songs_url import _FakeRequest
 from tests.test_download_modes import SONG
 
 
@@ -34,7 +39,6 @@ def test_forced_album_uses_canonical_structure_without_mutation(tmp_path, struct
 
 
 def test_forced_status_is_separate_from_global_playable_rows(tmp_path, monkeypatch):
-    import asyncio
     d = Downloader(tmp_path, folder_structure=False, playlist_use_library=True)
     playable = [{'file': 'Playlist/old.mp3'}]
     monkeypatch.setattr(api.state, 'downloader', d)
@@ -63,7 +67,6 @@ def test_legacy_forced_album_does_not_reuse_indexed_playlist(tmp_path):
 
 
 def test_forced_album_copies_local_source_even_with_leave_in_place(tmp_path, monkeypatch):
-    from downtify import downloader as module
     source = tmp_path / 'source.mp3'
     _make_audio(source)
     d = Downloader(tmp_path / 'downloads', folder_structure=False, slskd_settings={'leave_in_place': True})
@@ -75,7 +78,6 @@ def test_forced_album_copies_local_source_even_with_leave_in_place(tmp_path, mon
 
 
 def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, monkeypatch):
-    from downtify import downloader as module
     d = Downloader(tmp_path, folder_structure=False, playlist_use_library=True)
     before = (d.folder_structure, d.playlist_use_library, d.output_template, d.overwrite_existing_files)
     monkeypatch.setattr(module.spotify_mod, 'enrich_track_from_spotify_if_sparse', lambda song: song)
@@ -99,9 +101,7 @@ def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, m
 
 
 def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch):
-    import threading
 
-    from downtify import downloader as module
     source = tmp_path / 'source.mp3'
     _make_audio(source)
     d = Downloader(tmp_path / 'downloads', folder_structure=False)
@@ -122,10 +122,7 @@ def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch
 
 
 def test_batch_endpoint_retains_album_controls(monkeypatch):
-    import asyncio
-    from unittest.mock import AsyncMock
 
-    from tests.test_artist_top_songs_url import _FakeRequest
     monkeypatch.setattr(api.state, 'downloader', object())
     submit = AsyncMock(return_value={'count': 1})
     monkeypatch.setattr(api, '_submit_playlist_batch', submit)
@@ -137,10 +134,7 @@ def test_batch_endpoint_retains_album_controls(monkeypatch):
 
 @pytest.mark.parametrize('source', ['spotify', 'deezer', 'text_search'])
 def test_single_endpoint_retains_album_controls_for_all_sources(tmp_path, monkeypatch, source):
-    import asyncio
-    from unittest.mock import AsyncMock
 
-    from tests.test_artist_top_songs_url import _FakeRequest
     monkeypatch.setattr(api.state, 'downloader', Downloader(tmp_path, folder_structure=False))
     monkeypatch.setattr(api.state, 'download_jobs', {})
     monkeypatch.setattr(api, '_song_for_download', lambda url: dict(SONG))

@@ -669,6 +669,88 @@ def filter_library_entries(
     return out
 
 
+def _lookup_identity(row: dict[str, Any]) -> tuple[str, str]:
+    artist = primary_artist_of(row)
+    title = str(row.get('title') or row.get('name') or '').strip()
+    # A tuple avoids delimiter collisions for literal bars in both names.
+    return artist_identity_key(artist), song_key('', title)[1:]
+
+
+def _lookup_source(row: dict[str, Any]) -> str:
+    value = str(row.get('source') or '')
+    return 'youtube' if value == 'youtube_music' else value
+
+
+def _lookup_spotify_id(row: dict[str, Any]) -> Optional[str]:
+    # Do not interpret another provider's opaque song_id as Spotify.
+    if _lookup_source(row) not in {'', 'spotify'}:
+        return None
+    return normalize_spotify_track_id(row)
+
+
+def _index_lookup_entries(
+    entries: Sequence[dict[str, Any]], identities: dict[str, Any]
+) -> tuple[dict[tuple[str, str], list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    """Bucket library rows by display identity and by every known Spotify id."""
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    by_spotify_id: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        row = dict(entry)
+        ids = set(identities.get(str(row.get('file') or ''), set()))
+        stored_id = _lookup_spotify_id(row)
+        if stored_id:
+            ids.add(stored_id)
+        ids = {equivalent for tid in ids for equivalent in recording_equivalence.registry.equivalent_tracks(tid)}
+        if ids:
+            row['spotify_track_ids'] = sorted(ids)
+            if len(ids) == 1:
+                row['song_id'] = next(iter(ids))
+            for track_id in ids:
+                by_spotify_id.setdefault(track_id, []).append(row)
+        buckets.setdefault(_lookup_identity(row), []).append(row)
+    return buckets, by_spotify_id
+
+
+def _lookup_candidates(
+    raw: dict[str, Any],
+    requested_id: Optional[str],
+    buckets: dict[tuple[str, str], list[dict[str, Any]]],
+    by_spotify_id: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Rows that unambiguously match one requested song (possibly empty)."""
+    # Recording identity precedes mutable display metadata, including
+    # aliases, retitled tracks and corrected credits.
+    exact = by_spotify_id.get(requested_id, []) if requested_id else []
+    candidates = list(exact)
+    fallback_rows = [] if exact or not all(_lookup_identity(raw)) else buckets.get(_lookup_identity(raw), [])
+    for row in fallback_rows:
+        requested_artists = raw.get('artist_ids') or []
+        stored_artists = row.get('artist_ids') or []
+        if _lookup_source(raw) == _lookup_source(row) and requested_artists and stored_artists and requested_artists[0] and stored_artists[0] and requested_artists[0] != stored_artists[0]:
+            continue
+        ids = set(row.get('spotify_track_ids') or [])
+        if requested_id and ids and requested_id not in ids:
+            continue
+        if requested_id and requested_id in ids:
+            candidates.append(row)
+            continue
+        album = str(raw.get('album_name') or raw.get('album') or '').strip()
+        stored_album = str(row.get('album') or '').strip()
+        if album and stored_album and artist_identity_key(album) != artist_identity_key(stored_album):
+            continue
+        duration = float(raw.get('duration') or 0)
+        stored_duration = float(row.get('duration') or 0)
+        if duration and stored_duration and abs(duration - stored_duration) > 5:
+            continue
+        candidates.append(row)
+    exact = [r for r in candidates if requested_id and requested_id in r.get('spotify_track_ids', [])]
+    if exact:
+        return exact
+    # Multiple releases/known recordings are not an unambiguous fallback.
+    fingerprints = {(artist_identity_key(r.get('album') or ''), tuple(r.get('spotify_track_ids') or [])) for r in candidates}
+    return [] if len(fingerprints) > 1 else candidates
+
+
 def lookup_library_songs(
     ctx: LibraryContext,
     songs: Sequence[Any],
@@ -681,83 +763,20 @@ def lookup_library_songs(
     page doesn't offer someone else's file as "already downloaded".
     """
 
-    def identity(row: dict[str, Any]) -> tuple[str, str]:
-        artist = primary_artist_of(row)
-        title = str(row.get('title') or row.get('name') or '').strip()
-        # A tuple avoids delimiter collisions for literal bars in both names.
-        return artist_identity_key(artist), song_key('', title)[1:]
-
-    def source(row: dict[str, Any]) -> str:
-        value = str(row.get('source') or '')
-        return 'youtube' if value == 'youtube_music' else value
-
-    def spotify_id(row: dict[str, Any]) -> Optional[str]:
-        # Do not interpret another provider's opaque song_id as Spotify.
-        if source(row) not in {'', 'spotify'}:
-            return None
-        return normalize_spotify_track_id(row)
-
     requests = [raw for raw in songs[:LOOKUP_SONG_MAX]
-                if isinstance(raw, dict) and (spotify_id(raw) or all(identity(raw)))]
+                if isinstance(raw, dict) and (_lookup_spotify_id(raw) or all(_lookup_identity(raw)))]
     if not requests:
         return []
     entries = listing_for_request(ctx, allowed_keys=allowed_keys)
     index = getattr(ctx, 'track_index', None)
     identities = index.identities_for_files({str(e.get('file') or '') for e in entries}) if index else {}
-    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    by_spotify_id: dict[str, list[dict[str, Any]]] = {}
-    for entry in entries:
-        row = dict(entry)
-        ids = set(identities.get(str(row.get('file') or ''), set()))
-        stored_id = spotify_id(row)
-        if stored_id:
-            ids.add(stored_id)
-        ids = {equivalent for tid in ids for equivalent in recording_equivalence.registry.equivalent_tracks(tid)}
-        if ids:
-            row['spotify_track_ids'] = sorted(ids)
-            if len(ids) == 1:
-                row['song_id'] = next(iter(ids))
-            for track_id in ids:
-                by_spotify_id.setdefault(track_id, []).append(row)
-        buckets.setdefault(identity(row), []).append(row)
+    buckets, by_spotify_id = _index_lookup_entries(entries, identities)
 
     found: list[dict[str, Any]] = []
     files: set[str] = set()
     for raw in requests:
-        requested_id = spotify_id(raw)
-        # Recording identity precedes mutable display metadata, including
-        # aliases, retitled tracks and corrected credits.
-        exact = by_spotify_id.get(requested_id, []) if requested_id else []
-        candidates = list(exact)
-        fallback_rows = [] if exact or not all(identity(raw)) else buckets.get(identity(raw), [])
-        for row in fallback_rows:
-            requested_artists = raw.get('artist_ids') or []
-            stored_artists = row.get('artist_ids') or []
-            if source(raw) == source(row) and requested_artists and stored_artists and requested_artists[0] and stored_artists[0] and requested_artists[0] != stored_artists[0]:
-                continue
-            ids = set(row.get('spotify_track_ids') or [])
-            if requested_id and ids and requested_id not in ids:
-                continue
-            if requested_id and requested_id in ids:
-                candidates.append(row)
-                continue
-            album = str(raw.get('album_name') or raw.get('album') or '').strip()
-            stored_album = str(row.get('album') or '').strip()
-            if album and stored_album and artist_identity_key(album) != artist_identity_key(stored_album):
-                continue
-            duration = float(raw.get('duration') or 0)
-            stored_duration = float(row.get('duration') or 0)
-            if duration and stored_duration and abs(duration - stored_duration) > 5:
-                continue
-            candidates.append(row)
-        exact = [r for r in candidates if requested_id and requested_id in r.get('spotify_track_ids', [])]
-        if exact:
-            candidates = exact
-        else:
-            # Multiple releases/known recordings are not an unambiguous fallback.
-            fingerprints = {(artist_identity_key(r.get('album') or ''), tuple(r.get('spotify_track_ids') or [])) for r in candidates}
-            if len(fingerprints) > 1:
-                continue
+        requested_id = _lookup_spotify_id(raw)
+        candidates = _lookup_candidates(raw, requested_id, buckets, by_spotify_id)
         if candidates:
             row = candidates[0]
             if requested_id and requested_id in row.get('spotify_track_ids', []):

@@ -1,19 +1,23 @@
 """Legacy recovery must prove an edition, not infer it from search ranking."""
 
+import asyncio
 import copy
+from pathlib import Path
 
 import pytest
+from mutagen.id3 import ID3, TRCK, TXXX
 
-from downtify import spotify
-from downtify.album_source import resolve_album_source
-from downtify.track_index import TrackIndex
+from downtify import album_source, api, library_catalog, spotify
+from downtify.album_source import enrich_legacy_edition, resolve_album_source
+from downtify.download_destination import destination_status
+from downtify.track_index import TrackIndex, resolve_existing_download
+from tests.test_destination_dedupe import SONG, setup_playlist
 
 
 @pytest.fixture(autouse=True)
 def _strict_layer_only(monkeypatch):
     # These tests guard the exact-fingerprint layer; the best-effort search
     # fallback is covered by tests/test_album_source_loose.py.
-    from downtify import album_source
 
     monkeypatch.setattr(album_source, '_loose_versions', lambda *a, **k: [])
 
@@ -275,9 +279,6 @@ def test_trusted_local_total_disambiguates_single_from_ep(
 def test_source_endpoint_reads_total_from_visible_file_not_cache(
     legacy, tmp_path, monkeypatch, tag_number
 ):
-    from mutagen.id3 import ID3, TRCK
-
-    from downtify import api, library_catalog
 
     local, source = legacy
     local = [dict(local[0], album_track_total=99)]
@@ -332,9 +333,6 @@ def test_source_endpoint_reads_total_from_visible_file_not_cache(
 def test_single_tag_cannot_disambiguate_equal_length_ep_family(
     legacy, tmp_path, monkeypatch
 ):
-    from mutagen.id3 import ID3, TRCK, TXXX
-
-    from downtify.album_source import enrich_legacy_edition
 
     local, source = legacy
     path = tmp_path / 'visible.mp3'
@@ -377,7 +375,6 @@ def test_single_tag_cannot_disambiguate_equal_length_ep_family(
 
 def test_real_three_playlist_files_recover_full_fifteen(tmp_path, monkeypatch):
     import json
-    from pathlib import Path
 
     fixtures = Path(__file__).parent / 'fixtures'
     local = json.loads((fixtures / 'legacy_loyle_local.json').read_text())
@@ -411,9 +408,6 @@ def test_real_three_playlist_files_recover_full_fifteen(tmp_path, monkeypatch):
 
 
 def test_verified_copies_are_parent_scoped_and_invalidate_on_change(tmp_path):
-    from downtify.download_destination import destination_status
-    from downtify.track_index import resolve_existing_download
-    from tests.test_destination_dedupe import SONG, setup_playlist
 
     d, index, old = setup_playlist(tmp_path)
     legacy = old.with_name('Old credit punctuation.mp3')
@@ -443,7 +437,6 @@ def test_verified_copies_are_parent_scoped_and_invalidate_on_change(tmp_path):
 def test_source_endpoint_ignores_stale_metadata_and_registers_only_visible_copies(
     legacy, tmp_path, monkeypatch
 ):
-    from downtify import api, library_catalog
 
     local, source = legacy
     stale = dict(local[0], file='missing.mp3', title='Wrong stale title')
@@ -535,10 +528,6 @@ def test_legacy_rejects_weak_or_ambiguous_editions(
 def test_lookup_uses_verified_visible_identity_not_client_file_hints(
     tmp_path, monkeypatch
 ):
-    import asyncio
-
-    from downtify import api
-    from tests.test_destination_dedupe import SONG, setup_playlist
 
     d, index, old = setup_playlist(tmp_path)
     name = 'My Playlist/' + old.name
@@ -636,7 +625,6 @@ def test_actual_legacy_file_subset_recovers_full_source(
     tmp_path, monkeypatch, local_count
 ):
     import json
-    from pathlib import Path
 
     fixtures = Path(__file__).parent / 'fixtures'
     local = json.loads((fixtures / 'legacy_loyle_local.json').read_text())[
@@ -671,11 +659,6 @@ def test_actual_library_samples_with_physical_tag_totals(
     tmp_path, monkeypatch, sample_index
 ):
     import json
-    from pathlib import Path
-
-    from mutagen.id3 import ID3, TRCK
-
-    from downtify import api, library_catalog
 
     sample = json.loads(
         (

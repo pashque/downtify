@@ -8,11 +8,20 @@ from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, TXXX
 from mutagen.mp4 import MP4, MP4FreeForm
 
+from downtify import library_metadata_cache as cache_module
 from downtify.downloader import embed_metadata
+from downtify.library_catalog import (
+    LibraryContext,
+    library_album_index,
+    list_library_entries,
+)
+from downtify.library_listing_store import LibraryListingStore
 from downtify.library_metadata import (
     library_entry_for_file,
     read_audio_metadata,
 )
+from downtify.library_metadata_cache import META_VERSION, LibraryMetadataCache
+from downtify.sqlite_utils import connect_sqlite
 
 FFMPEG = shutil.which('ffmpeg')
 CODECS = {'mp3': 'libmp3lame', 'm4a': 'aac', 'flac': 'flac', 'ogg': 'libvorbis', 'opus': 'libopus'}
@@ -54,8 +63,6 @@ def _fixture(tmp_path, fmt, kind):
 
 @pytest.mark.parametrize('kind', ['album', 'single', 'ep', 'compilation', ''])
 def test_lightweight_album_index_carries_authoritative_type(tmp_path, kind):
-    from downtify.library_catalog import LibraryContext, library_album_index
-    from downtify.library_metadata_cache import LibraryMetadataCache
     path = _fixture(tmp_path, 'mp3', kind)
     before = path.read_bytes()
     ctx = LibraryContext(download_dir=tmp_path, metadata_cache=LibraryMetadataCache(tmp_path / 'metadata.db'))
@@ -88,8 +95,6 @@ def test_real_tags_are_authoritative_without_modifying_files(tmp_path, fmt, tag,
 @pytest.mark.parametrize('fmt', CODECS)
 @pytest.mark.parametrize('kind', ['album', 'single', 'ep', 'compilation', ''])
 def test_release_type_survives_cold_and_warm_cache_and_listing(tmp_path, monkeypatch, fmt, kind):
-    from downtify import library_metadata_cache as cache_module
-    from downtify.library_listing_store import LibraryListingStore
 
     path = _fixture(tmp_path, fmt, kind)
     before = path.read_bytes()
@@ -112,12 +117,6 @@ def test_release_type_survives_cold_and_warm_cache_and_listing(tmp_path, monkeyp
 
 
 def test_version_seven_rows_and_persisted_listing_are_invalidated(tmp_path):
-    from downtify.library_listing_store import LibraryListingStore
-    from downtify.library_metadata_cache import (
-        META_VERSION,
-        LibraryMetadataCache,
-    )
-    from downtify.sqlite_utils import connect_sqlite
 
     path = _fixture(tmp_path, 'mp3', 'single')
     before = path.read_bytes()
@@ -147,8 +146,6 @@ def test_version_seven_rows_and_persisted_listing_are_invalidated(tmp_path):
 
 @pytest.mark.parametrize('kind', ['album', ''])
 def test_one_local_track_of_partial_album_is_never_inferred_as_single(tmp_path, kind):
-    from downtify.library_catalog import LibraryContext, list_library_entries
-    from downtify.library_metadata_cache import LibraryMetadataCache
 
     path = _fixture(tmp_path, 'mp3', kind)
     ctx = LibraryContext(download_dir=tmp_path,

@@ -10,6 +10,8 @@ import wave
 from pathlib import Path
 
 import pytest
+from mutagen import File as MutagenFile
+from mutagen.id3 import TIT2, TPE1
 
 from downtify import api, artist_profile
 from downtify import downloader as downloader_mod
@@ -81,10 +83,8 @@ def _write_matching_audio(path: Path) -> None:
         audio.setsampwidth(2)
         audio.setframerate(8000)
         audio.writeframes(b'\x00\x00' * 800)
-    from mutagen import File as MutagenFile
     tagged = MutagenFile(str(path), easy=True)
     tagged.add_tags()
-    from mutagen.id3 import TIT2, TPE1
     tagged.tags.add(TIT2(encoding=3, text=SONG['name']))
     tagged.tags.add(TPE1(encoding=3, text=SONG['artists'][0]))
     tagged.save()

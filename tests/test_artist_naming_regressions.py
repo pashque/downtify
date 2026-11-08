@@ -1,3 +1,5 @@
+import pytest
+
 from downtify.download_destination import matches_destination
 from downtify.downloader import Downloader
 
@@ -37,7 +39,6 @@ def test_destination_match_is_case_sensitive(tmp_path):
 
 
 def test_invalid_existing_copy_conflicts_without_modifying_bytes(tmp_path):
-    import pytest
     d = Downloader(tmp_path, output_template='{artists} - {title}.{output-ext}')
     song = dict(name='Artist appears in title', artists=['New Artist'], album_artist='New Artist', album_name='Album', track_number=1, disc_number=1, duration=180, source_id='spotify:track:1', downtify_download_mode='missing')
     existing = tmp_path / 'New Artist - Artist appears in title.mp3'

@@ -1,10 +1,13 @@
 
+import subprocess
+
+import pytest
+
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download
 
 
 def _synthetic_audio(path, *, title='Song', artist='Artist'):
-    import subprocess
     subprocess.run([
         'ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
         'sine=frequency=440:duration=0.2', '-metadata', f'title={title}',
@@ -36,7 +39,6 @@ def test_managed_destination_rejects_conflicting_stat_valid_source_before_regist
 
 
 def test_known_conflicting_stat_valid_source_copy_is_not_rebound(tmp_path, monkeypatch):
-    import subprocess
     audio = tmp_path / 'copy.mp3'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(audio)], check=True)
     index = TrackIndex(tmp_path / 'index.sqlite')
@@ -52,7 +54,6 @@ def test_known_conflicting_stat_valid_source_copy_is_not_rebound(tmp_path, monke
 
 
 def test_same_source_stat_valid_copy_is_reused(tmp_path, monkeypatch):
-    import subprocess
     audio = tmp_path / 'copy.mp3'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(audio)], check=True)
     index = TrackIndex(tmp_path / 'index.sqlite')
@@ -64,7 +65,6 @@ def test_same_source_stat_valid_copy_is_reused(tmp_path, monkeypatch):
 
 
 def test_stale_source_stat_evidence_allows_reuse_without_registration(tmp_path, monkeypatch):
-    import subprocess
     audio = tmp_path / 'copy.mp3'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(audio)], check=True)
     index = TrackIndex(tmp_path / 'index.sqlite')
@@ -79,7 +79,6 @@ def test_stale_source_stat_evidence_allows_reuse_without_registration(tmp_path, 
 
 
 def test_canonical_indexed_copy_with_conflicting_source_id_is_not_reused(tmp_path, monkeypatch):
-    import subprocess
     audio = tmp_path / 'copy.mp3'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(audio)], check=True)
     index = TrackIndex(tmp_path / 'index.sqlite')
@@ -101,7 +100,6 @@ def test_source_identity_uses_resolved_path_not_requested_filename(tmp_path):
     requested = {'song_id': 'B' * 22}
     index.register_source_copy(prior, 'stored-alias.mp3', audio)
 
-    import pytest
     with pytest.raises(RuntimeError, match='different source track'):
         index.validate_source_identity(requested, 'requested-name.mp3', audio)
 
@@ -122,7 +120,6 @@ def test_source_identity_ignores_same_filename_at_different_physical_root(tmp_pa
 
 
 def test_multiple_source_aliases_allow_only_requested_identity(tmp_path, monkeypatch):
-    import subprocess
     audio = tmp_path / 'copy.mp3'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', '-metadata', 'title=Song', '-metadata', 'artist=Artist', '-q:a', '9', '-y', str(audio)], check=True)
     index = TrackIndex(tmp_path / 'index.sqlite')

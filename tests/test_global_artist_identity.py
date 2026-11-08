@@ -4,6 +4,7 @@ import pytest
 from downtify import library_catalog as catalog
 from downtify import library_sync as sync
 from downtify import providers
+from downtify.track_index import TrackIndex
 
 
 @pytest.mark.parametrize('artist', ['!!!', '+++', '|', 'A/B', 'A&B', 'A B', '東京', 'Straße', 'Strasse'])
@@ -98,7 +99,6 @@ def test_song_key_preserves_recording_versions(left, right):
 
 
 def test_lookup_uses_batch_source_ids_and_rejects_other_recording(monkeypatch, tmp_path):
-    from downtify.track_index import TrackIndex
     index = TrackIndex(tmp_path / 'index.db')
     # Real canonical and stat-validated recovered identities; no provider calls.
     path = tmp_path / 'right.mp3'

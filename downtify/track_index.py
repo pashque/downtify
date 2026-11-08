@@ -51,55 +51,8 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class TrackIndex:
-    """SQLite index: one canonical relative path per Spotify track id."""
-
-    def __init__(self, db_path: Path) -> None:
-        self._path = str(db_path)
-        self._init_db()
-
-    def _connect(self) -> sqlite3.Connection:
-        return connect_sqlite(self._path, row_factory=True)
-
-    def album_preference(self, user_id: int, artist: str, title: str) -> Optional[str]:
-        with self._connect() as conn:
-            row = conn.execute('SELECT edition FROM library_album_preferences WHERE user_id=? AND artist=? AND title=?',
-                               (user_id, exact_name_key(artist), exact_name_key(title))).fetchone()
-        return row['edition'] if row else None
-
-    def set_album_preference(self, user_id: int, artist: str, title: str, edition: str) -> None:
-        if not _SPOTIFY_TRACK_ID.fullmatch(edition):
-            raise ValueError('Invalid Spotify album ID')
-        with self._connect() as conn:
-            conn.execute('INSERT OR REPLACE INTO library_album_preferences (user_id,artist,title,edition) VALUES (?,?,?,?)',
-                         (user_id, exact_name_key(artist), exact_name_key(title), edition))
-
-    def _init_db(self) -> None:
-        with self._connect() as conn:
-            conn.execute('CREATE TABLE IF NOT EXISTS library_album_preferences (user_id INTEGER NOT NULL, artist TEXT NOT NULL, title TEXT NOT NULL, edition TEXT NOT NULL, PRIMARY KEY(user_id,artist,title))')
-            conn.execute('''CREATE TABLE IF NOT EXISTS library_source_copies (
-                spotify_track_id TEXT NOT NULL, filename TEXT NOT NULL,
-                full_path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
-                PRIMARY KEY (spotify_track_id, filename))''')
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS library_tracks (
-                    spotify_track_id TEXT PRIMARY KEY,
-                    filename TEXT NOT NULL,
-                    content_key TEXT,
-                    registered_at TEXT NOT NULL
-                )
-            """)
-            try:
-                conn.execute(
-                    'ALTER TABLE library_tracks ADD COLUMN content_key TEXT'
-                )
-            except Exception:
-                pass
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_library_tracks_content_key
-                ON library_tracks (content_key)
-                WHERE content_key IS NOT NULL
-            """)
+class _SourceCopyIndex:
+    """Stat-validated source-copy bindings (needs ``_connect`` from the index)."""
 
     def register_source_copy(self, song: dict[str, Any], filename: str, full_path: Path) -> None:
         """Internal only: bind a fingerprint-verified local copy to a source ID.
@@ -178,6 +131,57 @@ class TrackIndex:
         known = self.validated_source_copy_ids_for_path(path)
         if known and requested not in known:
             raise RuntimeError(f'Existing file {filename!r} is indexed to a different source track')
+
+
+class TrackIndex(_SourceCopyIndex):
+    """SQLite index: one canonical relative path per Spotify track id."""
+
+    def __init__(self, db_path: Path) -> None:
+        self._path = str(db_path)
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        return connect_sqlite(self._path, row_factory=True)
+
+    def album_preference(self, user_id: int, artist: str, title: str) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute('SELECT edition FROM library_album_preferences WHERE user_id=? AND artist=? AND title=?',
+                               (user_id, exact_name_key(artist), exact_name_key(title))).fetchone()
+        return row['edition'] if row else None
+
+    def set_album_preference(self, user_id: int, artist: str, title: str, edition: str) -> None:
+        if not _SPOTIFY_TRACK_ID.fullmatch(edition):
+            raise ValueError('Invalid Spotify album ID')
+        with self._connect() as conn:
+            conn.execute('INSERT OR REPLACE INTO library_album_preferences (user_id,artist,title,edition) VALUES (?,?,?,?)',
+                         (user_id, exact_name_key(artist), exact_name_key(title), edition))
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS library_album_preferences (user_id INTEGER NOT NULL, artist TEXT NOT NULL, title TEXT NOT NULL, edition TEXT NOT NULL, PRIMARY KEY(user_id,artist,title))')
+            conn.execute('''CREATE TABLE IF NOT EXISTS library_source_copies (
+                spotify_track_id TEXT NOT NULL, filename TEXT NOT NULL,
+                full_path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
+                PRIMARY KEY (spotify_track_id, filename))''')
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS library_tracks (
+                    spotify_track_id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    content_key TEXT,
+                    registered_at TEXT NOT NULL
+                )
+            """)
+            try:
+                conn.execute(
+                    'ALTER TABLE library_tracks ADD COLUMN content_key TEXT'
+                )
+            except Exception:
+                pass
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_library_tracks_content_key
+                ON library_tracks (content_key)
+                WHERE content_key IS NOT NULL
+            """)
 
     def identities_for_files(self, filenames: set[str]) -> dict[str, set[str]]:
         """Batch reverse provenance, including stat-validated recovered copies.

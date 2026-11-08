@@ -1,9 +1,12 @@
+import asyncio
 import hashlib
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from mutagen.id3 import ID3, TIT2, TPE1, TXXX
 
+from downtify import api
 from downtify.artist_credit_repair import apply_file, prepare, source_credits
 from downtify.playlist_spotify_cache import PlaylistSpotifyCache
 
@@ -83,11 +86,6 @@ def test_exact_cached_track_restores_missing_album_row_boundaries(tmp_path):
 
 
 def test_endpoint_dry_run_apply_and_admin_boundary(tmp_path, monkeypatch):
-    import asyncio
-
-    from fastapi import HTTPException
-
-    from downtify import api
 
     p = data_file(tmp_path)
     old = p.read_bytes()

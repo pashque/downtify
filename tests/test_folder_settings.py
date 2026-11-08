@@ -1,12 +1,21 @@
 """Backend storage-toggle settings and shared playlist routing."""
+import ast
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
-from downtify import api
+from downtify import api, monitor
+from downtify.downloader import Downloader
+from downtify.folder_settings import settings_use_shared_playlists
+from downtify.library_delete import delete_playlist_from_library
+from downtify.library_reconcile import refresh_playlists_after_moves
+from downtify.playlist_catalog import PlaylistCatalog
+from downtify.track_index import TrackIndex
 
 FULL = '{albumartist}/{albumartist} - {album} ({year})/{tracknumber}. {artists} - {title}.{output-ext}'
 FLAT = '{artists} - {title}.{output-ext}'
@@ -24,7 +33,6 @@ class Request:
 def settings_state(monkeypatch, tmp_path):
     monkeypatch.setattr(api.state, 'settings', dict(api.DEFAULT_SETTINGS))
     monkeypatch.setattr(api.state, 'settings_path', tmp_path / 'settings.json')
-    from downtify.downloader import Downloader
     downloader = Downloader(tmp_path, organize_by_artist=True, organize_by_album=True)
     downloader.output_template = 'custom'
     downloader.folder_structure = None
@@ -71,8 +79,6 @@ def test_toggle_validation_is_atomic(settings_state, key, value):
 
 @pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_shared_playlist_routing(settings_state, structured, shared, expected, monkeypatch, tmp_path):
-    from downtify import monitor
-    from downtify.folder_settings import settings_use_shared_playlists
     settings_state.settings.update(folder_structure=structured, playlist_use_library=shared,
                                    organize_by_artist=False, organize_by_album=False)
     d = settings_state.downloader
@@ -96,7 +102,6 @@ def test_shared_playlist_routing(settings_state, structured, shared, expected, m
 
 
 def test_mock_legacy_downloader_does_not_invent_new_flags(settings_state, monkeypatch):
-    from unittest.mock import MagicMock
     d = MagicMock()
     d.organize_by_artist = d.organize_by_album = False
     monkeypatch.setattr(api.state, 'downloader', d)
@@ -124,8 +129,6 @@ def test_batch_only_passes_own_folder_in_separate_mode(settings_state, monkeypat
 
 
 def test_main_passes_storage_settings_to_downloader():
-    import ast
-    from pathlib import Path
     tree = ast.parse((Path(__file__).parents[1] / 'main.py').read_text())
     constructors = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Name) and node.func.id == 'Downloader']
@@ -135,9 +138,6 @@ def test_main_passes_storage_settings_to_downloader():
 
 @pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_library_delete_only_scans_owned_playlist_folder(tmp_path, structured, shared, expected):
-    from downtify.library_delete import delete_playlist_from_library
-    from downtify.playlist_catalog import PlaylistCatalog
-    from downtify.track_index import TrackIndex
     download_dir = tmp_path / 'downloads'
     folder = download_dir / 'Mix'
     folder.mkdir(parents=True)
@@ -156,8 +156,6 @@ def test_library_delete_only_scans_owned_playlist_folder(tmp_path, structured, s
 
 @pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_library_reconcile_m3u_uses_storage_policy(settings_state, tmp_path, structured, shared, expected):
-    from downtify.library_reconcile import refresh_playlists_after_moves
-    from downtify.playlist_catalog import PlaylistCatalog
     audio = tmp_path / 'song.mp3'
     audio.write_bytes(b'audio')
     catalog = PlaylistCatalog(tmp_path / 'library.db')

@@ -2,7 +2,10 @@
 import pytest
 from fastapi import HTTPException
 
-from downtify import api
+from downtify import album_source, api
+from downtify.album_source import resolve_album_source
+from downtify.auth import CLIENT, classify
+from downtify.library_visibility import album_key
 from downtify.track_index import TrackIndex
 from tests.test_download_modes import SONG
 from tests.test_library_visibility import _request
@@ -12,7 +15,6 @@ from tests.test_library_visibility import library as library
 @pytest.fixture(autouse=True)
 def _no_live_version_search(monkeypatch):
     # Extra-version search must never reach the network in tests.
-    from downtify import album_source
     monkeypatch.setattr(album_source, '_loose_versions', lambda *a, **k: [])
 
 
@@ -22,7 +24,6 @@ def test_source_endpoint_enforces_real_hidden_album_rules(library, monkeypatch, 
     if indexed:
         index.register('A' * 22, 'Ana/Sun/Ana - One.mp3')
     monkeypatch.setattr(api.state, 'track_index', index)
-    from downtify.library_visibility import album_key
     api.state.library_visibility.hide('album', album_key('Ana', 'Sun'))
     monkeypatch.setattr(api.spotify, 'search', lambda query: pytest.fail('hidden album search'))
     monkeypatch.setattr(api.spotify, '_album_ref_from_open_track_page', lambda tid: pytest.fail('hidden provenance'))
@@ -32,7 +33,6 @@ def test_source_endpoint_enforces_real_hidden_album_rules(library, monkeypatch, 
 
 
 def test_source_route_allows_authenticated_library_clients():
-    from downtify.auth import CLIENT, classify
     assert classify('GET', '/api/library/album/source') == CLIENT
 
 
@@ -51,7 +51,6 @@ def test_source_endpoint_expands_only_visible_owned_tracks(monkeypatch, tmp_path
 
 @pytest.mark.parametrize('album_id', ['bad', 'https://open.spotify.com/album/' + 'A' * 22])
 def test_malformed_album_identity_is_never_normalized(monkeypatch, tmp_path, album_id):
-    from downtify.album_source import resolve_album_source
     index = TrackIndex(tmp_path / 'index.db')
     index.register_song(SONG, 'local.mp3')
     monkeypatch.setattr(api.spotify, '_album_ref_from_open_track_page', lambda tid: (album_id, ''))
@@ -61,7 +60,6 @@ def test_malformed_album_identity_is_never_normalized(monkeypatch, tmp_path, alb
 
 @pytest.mark.parametrize('source_tracks', [[], [dict(SONG, album_name='Dark Lane Demo Tapes (Deluxe)')], [dict(SONG, song_id='C' * 22)]])
 def test_different_edition_or_missing_known_identity_is_unavailable(monkeypatch, tmp_path, source_tracks):
-    from downtify.album_source import resolve_album_source
     index = TrackIndex(tmp_path / 'index.db')
     index.register_song(SONG, 'local.mp3')
     monkeypatch.setattr(api.spotify, '_album_ref_from_open_track_page', lambda tid: ('A' * 22, ''))
@@ -70,7 +68,6 @@ def test_different_edition_or_missing_known_identity_is_unavailable(monkeypatch,
 
 
 def test_unknown_provenance_never_searches_network(monkeypatch, tmp_path):
-    from downtify.album_source import resolve_album_source
     monkeypatch.setattr(api.spotify, 'search', lambda query: pytest.fail('insufficient metadata search'))
     monkeypatch.setattr(api.spotify, '_album_ref_from_open_track_page', lambda tid: pytest.fail('no known identity'))
     assert resolve_album_source([{'file': 'unknown.mp3'}], SONG['album_name'], TrackIndex(tmp_path / 'index.db'))['status'] == 'unavailable'

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from downtify import spotify
+from downtify import album_source, spotify
 from downtify.album_source import resolve_album_source
 from downtify.track_index import TrackIndex
 
@@ -14,7 +14,6 @@ from downtify.track_index import TrackIndex
 def _strict_layer_only(monkeypatch):
     # These tests guard the exact-fingerprint layer; the best-effort search
     # fallback is covered by tests/test_album_source_loose.py.
-    from downtify import album_source
 
     monkeypatch.setattr(album_source, '_loose_versions', lambda *a, **k: [])
 

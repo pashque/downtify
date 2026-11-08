@@ -1,8 +1,10 @@
 import hashlib
+from pathlib import Path
 
 import pytest
 
 from downtify.album_binding_repair import repair_bindings
+from downtify.auth import ADMIN, classify
 from downtify.library_catalog import LibraryContext
 from downtify.track_index import TrackIndex
 
@@ -69,7 +71,6 @@ def test_dry_run_and_atomic_alias_repair_preserve_audio_and_original_binding(
     ]
     assert index.lookup('B' * 22) == 'one.mp3'
     assert file.read_bytes() == before
-    from pathlib import Path
 
     assert Path(out['backup']).is_file()
 
@@ -107,6 +108,5 @@ def test_valid_subset_does_not_claim_an_unchecked_track(case):
 
 
 def test_repair_route_is_explicitly_admin_only():
-    from downtify.auth import ADMIN, classify
 
     assert classify('POST', '/api/library/album/bindings/repair') == ADMIN

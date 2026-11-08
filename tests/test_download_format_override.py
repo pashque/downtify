@@ -1,12 +1,16 @@
 """Per-request output formats never change the shared downloader settings."""
 import asyncio
-from unittest.mock import AsyncMock
+import shutil
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+import yt_dlp
 from fastapi import HTTPException
 
 from downtify import api
 from downtify.downloader import Downloader
+from downtify.track_index import TrackIndex
 
 SONG = dict(song_id='format-test', source='deezer', name='Song', artists=['Artist'],
             album_artist='Artist', album_name='Album', track_number=1,
@@ -15,7 +19,6 @@ SONG = dict(song_id='format-test', source='deezer', name='Song', artists=['Artis
 
 def _write_valid_flac(path):
     """Create a tiny, tagged FLAC fixture entirely offline with ffmpeg."""
-    import shutil
     import subprocess
 
     if not shutil.which('ffmpeg'):
@@ -66,7 +69,6 @@ def test_override_acquires_separate_format_without_deleting_mp3(tmp_path, monkey
             calls.append(pp.mapping)
 
         def download(self, urls):
-            from pathlib import Path
             Path(self.opts['outtmpl'].replace('%(ext)s', calls[-1])).write_bytes(b'new audio')
 
     monkeypatch.setattr('downtify.downloader.yt_dlp.YoutubeDL', YDL)
@@ -119,7 +121,6 @@ def test_api_does_not_reuse_wrong_format_destination(tmp_path, monkeypatch, comp
 
 @pytest.mark.parametrize('completed', [False, True])
 def test_api_rejects_contradictory_existing_mp3_without_acquiring_or_registering(tmp_path, monkeypatch, completed):
-    import shutil
     import subprocess
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
@@ -152,7 +153,6 @@ def test_override_stages_away_from_existing_audio(tmp_path, monkeypatch):
     original.write_bytes(b'original')
 
     def opts(template, hook):
-        from pathlib import Path
         assert Path(template).parent != tmp_path
         raise RuntimeError('isolated staging reached')
     monkeypatch.setattr(d, '_ydl_options', opts)
@@ -176,7 +176,6 @@ def test_batch_applies_top_level_format_to_all_rows(tmp_path, monkeypatch):
 
 
 def test_api_indexed_explicit_format_copy_is_validated(tmp_path):
-    from unittest.mock import Mock
 
     d = Downloader(tmp_path, folder_structure=True, overwrite_existing_files=False)
     song = dict(SONG, downtify_audio_format='flac')
@@ -193,7 +192,6 @@ def test_api_indexed_explicit_format_copy_is_validated(tmp_path):
 
 
 def test_api_indexed_mp3_cannot_satisfy_flac_request(tmp_path, monkeypatch):
-    from unittest.mock import Mock
     d = Downloader(tmp_path, folder_structure=True, overwrite_existing_files=False)
     song = dict(SONG, downtify_audio_format='flac')
     directory, _, stem = d._target_location(song, None)
@@ -215,7 +213,6 @@ def test_api_indexed_mp3_cannot_satisfy_flac_request(tmp_path, monkeypatch):
 def test_api_rejects_different_indexed_source_before_reuse_or_owner_claim(
     tmp_path, monkeypatch, completed,
 ):
-    from downtify.track_index import TrackIndex
 
     requested = dict(SONG, song_id='4uLU6hMCjMI75M1A2tKUQC', downtify_audio_format='mp3')
     conflicting = '1x00000000000000000000'
@@ -248,7 +245,6 @@ def test_api_rejects_different_indexed_source_before_reuse_or_owner_claim(
 
 
 def test_api_explicit_format_matching_indexed_source_is_reusable(tmp_path):
-    from downtify.track_index import TrackIndex
 
     song = dict(SONG, song_id='4uLU6hMCjMI75M1A2tKUQC', downtify_audio_format='mp3')
     d = Downloader(tmp_path, folder_structure=False)
@@ -390,10 +386,8 @@ def test_batch_validates_formats_before_queueing(tmp_path, monkeypatch, payload)
 def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
     """Offline lossy-source conversion: a FLAC container does not restore fidelity."""
     import json
-    import shutil
     import subprocess
 
-    import yt_dlp
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('ffmpeg and ffprobe required')
     original = tmp_path / 'Artist - Song.mp3'
@@ -404,7 +398,6 @@ def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
 
     class OfflineYDL(real_ydl):
         def download(self, urls):
-            from pathlib import Path
             source = Path(self.params['outtmpl']['default'].replace('%(ext)s', 'mp3'))
             shutil.copyfile(original, source)
             info = {'filepath': str(source), 'ext': 'mp3', 'vcodec': 'none'}
@@ -426,7 +419,6 @@ def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
 
 
 def test_local_provider_format_override_copies_and_converts_without_touching_source(tmp_path, monkeypatch):
-    import shutil
     import subprocess
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg required')

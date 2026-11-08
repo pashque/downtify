@@ -1,10 +1,17 @@
 """Read-only, on-demand technical details from actual generated audio."""
 import hashlib
+import os
 import subprocess
 
 import pytest
+from fastapi import HTTPException
+from mutagen.mp3 import MP3, MPEGFrame
+from starlette.requests import Request
 
-from downtify import audio_details
+from downtify import api, audio_details
+from downtify.auth import CLIENT, classify
+from downtify.library_catalog import LibraryContext
+from downtify.library_paths import library_stored_path
 
 
 def test_details_cache_is_stat_validated_and_returns_independent_results(tmp_path, monkeypatch):
@@ -20,7 +27,6 @@ def test_details_cache_is_stat_validated_and_returns_independent_results(tmp_pat
     first['codec'] = 'wrong'
     assert audio_details.read_audio_details(path)['codec'] == 'mp3'
     assert len(calls) == 1
-    import os
     stat = path.stat()
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
     audio_details.read_audio_details(path)
@@ -35,12 +41,7 @@ def test_compressed_bitrate_is_measured_not_nominal_or_decoded_pcm_rate(tmp_path
 
 
 def test_endpoint_preserves_external_and_slskd_roots_but_rejects_escape(tmp_path, monkeypatch):
-    from fastapi import HTTPException
-    from starlette.requests import Request
 
-    from downtify import api
-    from downtify.library_catalog import LibraryContext
-    from downtify.library_paths import library_stored_path
     root, extra, slskd, outside = [tmp_path / name for name in ('downloads', 'extra', 'slskd', 'outside')]
     for folder in (root, extra, slskd, outside):
         folder.mkdir()
@@ -72,7 +73,6 @@ def test_ffprobe_failure_does_not_expose_nominal_bitrate(tmp_path, monkeypatch):
 
 
 def test_mp3_mixed_modes_are_hidden_and_dual_channel_is_read_from_headers(tmp_path):
-    from mutagen.mp3 import MP3, MPEGFrame
     path = generate(tmp_path / 'modes.mp3', '-c:a', 'libmp3lame', '-joint_stereo', '0')
     data = bytearray(path.read_bytes())
     with path.open('rb') as stream:
@@ -91,22 +91,16 @@ def test_mp3_mixed_modes_are_hidden_and_dual_channel_is_read_from_headers(tmp_pa
     path.write_bytes(data)
     # Overlay filesystems can give rapid, same-size writes identical stat keys.
     # This test exercises mixed frame modes, not cache invalidation timing.
-    import os
     os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
     assert 'channel_mode' not in audio_details.read_audio_details(path)
 
 
 def test_audio_details_endpoint_is_available_to_authenticated_library_clients():
-    from downtify.auth import CLIENT, classify
     assert classify('GET', '/api/library/audio-details') == CLIENT
 
 
 def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(tmp_path, monkeypatch):
-    from fastapi import HTTPException
-    from starlette.requests import Request
 
-    from downtify import api
-    from downtify.library_catalog import LibraryContext
     path = generate(tmp_path / 'track.mp3', '-c:a', 'libmp3lame')
     monkeypatch.setattr(api, 'library_context', lambda: LibraryContext(download_dir=tmp_path))
     monkeypatch.setattr(api, 'allowed_entry_keys', lambda request: None)

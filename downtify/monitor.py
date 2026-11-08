@@ -840,6 +840,25 @@ async def _fill_from_spotify_track(song: dict[str, Any]) -> None:
         song['explicit'] = True
 
 
+async def _fetch_watched_tracks(
+    playlist: MonitoredPlaylist, db: PlaylistMonitorDB
+) -> Optional[list[dict[str, Any]]]:
+    """Fetch the playlist's tracks, or ``None`` after recording a failed check."""
+    fetch_tracks = (
+        spotify.playlist_tracks_from_id
+        if playlist.source == SOURCE_SPOTIFY
+        else providers.playlist_tracks_from_id
+    )
+    try:
+        return await asyncio.to_thread(fetch_tracks, playlist.spotify_id)
+    except Exception:
+        logger.exception('Failed to fetch playlist {}', playlist.spotify_id)
+        await asyncio.to_thread(
+            db.update_playlist, playlist.id, last_checked=_now_iso()
+        )
+        return None
+
+
 async def check_playlist(
     playlist: MonitoredPlaylist,
     db: PlaylistMonitorDB,
@@ -863,22 +882,11 @@ async def check_playlist(
         playlist.spotify_id,
     )
 
-    from_spotify = playlist.source == SOURCE_SPOTIFY
-    fetch_tracks = (
-        spotify.playlist_tracks_from_id
-        if from_spotify
-        else providers.playlist_tracks_from_id
-    )
-    try:
-        tracks = await asyncio.to_thread(fetch_tracks, playlist.spotify_id)
-    except Exception:
-        logger.exception('Failed to fetch playlist {}', playlist.spotify_id)
-        await asyncio.to_thread(
-            db.update_playlist, playlist.id, last_checked=_now_iso()
-        )
+    tracks = await _fetch_watched_tracks(playlist, db)
+    if tracks is None:
         return 0
     library = library or LibraryStores()
-    if from_spotify and library.playlist_spotify_cache is not None:
+    if playlist.source == SOURCE_SPOTIFY and library.playlist_spotify_cache is not None:
         await asyncio.to_thread(
             library.playlist_spotify_cache.store,
             playlist.spotify_id,
@@ -935,7 +943,7 @@ async def check_playlist(
         pl_name = playlist.name
 
         # YouTube Music rows already carry their own video's metadata.
-        if from_spotify:
+        if playlist.source == SOURCE_SPOTIFY:
             await _fill_from_spotify_track(song)
 
         def _make_cb(s: dict, name: str) -> ProgressCallback:

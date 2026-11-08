@@ -275,6 +275,29 @@ def _preserved_m3u_entries(target, download_dir, slskd_dir, extra_dirs):
     return result
 
 
+def _merge_preserved_rows(rows: list[dict], existing: list[dict]) -> list[dict]:
+    """Keep ``existing`` members (refreshed from ``rows``) and append new ones."""
+    updates = {row['filename']: row for row in rows if row.get('filename')}
+    seen = {row['filename'] for row in existing}
+    combined = [updates[row['filename']] if row['filename'] in updates else row for row in existing]
+    for row in rows:
+        name = row.get('filename')
+        if name and name not in seen:
+            combined.append(row)
+            seen.add(name)
+    return combined
+
+
+def _apply_source_order(rows: list[dict], source_order: Iterable[str]) -> list[dict]:
+    """Replay source occurrences; members absent from the snapshot go last."""
+    by_name = {row.get('filename'): row for row in rows}
+    ordered_names = [name for name in source_order if name in by_name]
+    ordered_set = set(ordered_names)
+    return [by_name[name] for name in ordered_names] + [
+        row for row in rows if row.get('filename') not in ordered_set
+    ]
+
+
 def write_m3u(
     download_dir: Path,
     playlist_name: str,
@@ -312,25 +335,12 @@ def write_m3u(
         # Incremental/missing-only downloads must not replace a large playlist
         # with only this batch's few successes. Full snapshots retain replace.
         existing = _preserved_m3u_entries(target, Path(download_dir), slskd_dir, extra_dirs)
-        updates = {row['filename']: row for row in rows if row.get('filename')}
-        seen = {row['filename'] for row in existing}
-        combined = [updates[row['filename']] if row['filename'] in updates else row for row in existing]
-        for row in rows:
-            name = row.get('filename')
-            if name and name not in seen:
-                combined.append(row)
-                seen.add(name)
-        rows = combined
+        rows = _merge_preserved_rows(rows, existing)
     if source_order is not None:
         # An incremental merge retains membership, not the old ordering.
         # Replay source occurrences (including repeated files), retaining
         # members absent from this snapshot at the end until a full sync.
-        by_name = {row.get('filename'): row for row in rows}
-        ordered_names = [name for name in source_order if name in by_name]
-        ordered_set = set(ordered_names)
-        rows = [by_name[name] for name in ordered_names] + [
-            row for row in rows if row.get('filename') not in ordered_set
-        ]
+        rows = _apply_source_order(rows, source_order)
     content, kept = build_m3u_content(
         rows,
         download_dir=Path(download_dir),

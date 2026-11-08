@@ -2,7 +2,7 @@
 import pytest
 from fastapi import HTTPException
 
-from downtify import api, spotify
+from downtify import api, auth, spotify
 
 
 def test_returns_exact_spotify_artist(monkeypatch):
@@ -23,5 +23,4 @@ def test_unknown_or_failing_lookup_is_404(monkeypatch, found):
 
 
 def test_route_is_open_to_signed_in_clients():
-    from downtify import auth
     assert auth.rule_for('GET', '/api/artists/spotify_id') == auth.CLIENT

@@ -2,6 +2,7 @@
 import asyncio
 import shutil
 import subprocess
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 
@@ -45,7 +46,6 @@ def run(db, playlist, downloader, library):
 def _audio_bytes(suffix):
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
-    import tempfile
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / ('fixture' + suffix)
         codec = {'mp3': ['-q:a', '9'], 'opus': ['-c:a', 'libopus', '-b:a', '32k'],

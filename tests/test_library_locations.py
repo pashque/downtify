@@ -4,18 +4,33 @@ import asyncio
 import json
 
 import pytest
+from fastapi import HTTPException
+from mutagen.id3 import ID3, TDRC, TPE2, TRCK
 from starlette.requests import Request
 
-from downtify import api
+from downtify import api, deezer, recording_equivalence, spotify
 from downtify.auth import CLIENT, Principal, classify
 from downtify.downloader import Downloader
-from downtify.library_catalog import LibraryContext, list_library_entries
+from downtify.library_catalog import (
+    LibraryContext,
+    list_library_entries,
+    lookup_library_songs,
+)
+from downtify.library_locations import track_locations
 from downtify.library_paths_cache import (
     invalidate_library_paths_cache,
     set_listing_refresh_fn,
 )
+from downtify.library_visibility import KIND_TRACK, LibraryVisibility
+from downtify.manual_playlists import (
+    create_manual_playlist,
+    edit_manual_playlist,
+)
+from downtify.playlist_catalog import PlaylistCatalog
+from downtify.recording_equivalence import RecordingEquivalenceRegistry
 from downtify.track_index import TrackIndex
-from tests.test_library_visibility import _write_track
+from tests.test_library_visibility import _request, _write_track
+from tests.test_recording_equivalence import A, B, sequence
 
 SONG = dict(
     song_id='5fHrHoJKfCgBd35zwIBmUK',
@@ -78,9 +93,6 @@ def env(tmp_path, monkeypatch):
 def test_equivalent_provider_editions_show_actual_formats_without_rebinding(
     env, monkeypatch
 ):
-    from downtify import recording_equivalence
-    from downtify.recording_equivalence import RecordingEquivalenceRegistry
-    from tests.test_recording_equivalence import A, B, sequence
 
     root, index, downloader = env
     first, second = sequence('a'), sequence('b')
@@ -92,7 +104,6 @@ def test_equivalent_provider_editions_show_actual_formats_without_rebinding(
     _write_track(root, rel, 'First', 'Artist', 'Title')
     index.register_song(first[0], rel, full_path=root / rel)
     assert locations([second[0]])[0]['formats'] == ['mp3']
-    from downtify.library_catalog import lookup_library_songs
 
     assert (
         lookup_library_songs(api.library_context(), [second[0]])[0]['song_id']
@@ -105,7 +116,6 @@ def test_equivalent_provider_editions_show_actual_formats_without_rebinding(
 
 def test_source_id_preserves_album_and_playlist_formats(env, monkeypatch):
     root, index, downloader = env
-    from mutagen.id3 import ID3, TDRC, TRCK
 
     album = (
         downloader.expected_stem_for(dict(SONG, downtify_destination='album'))
@@ -151,7 +161,6 @@ def test_local_binding_finds_other_proven_copies_ignoring_client_identity(env):
         _write_track(root, rel, 'One', 'Ana', 'Sun')
         index.register_source_copy(SONG, rel, root / rel)
     # If the reverse binding is ignored the second copy's playlist disappears.
-    from downtify.library_locations import track_locations
 
     rows = list_library_entries(api.library_context())
     result = track_locations(
@@ -171,7 +180,6 @@ def test_complete_fingerprint_joins_unindexed_copies_but_not_name_only(
     env, monkeypatch, source
 ):
     root, index, downloader = env
-    from downtify.library_locations import track_locations
 
     rows = []
     for rel in ('Mix/one.mp3', 'Other/one.flac', 'Unrelated/one.mp3'):
@@ -208,7 +216,6 @@ def test_complete_fingerprint_joins_unindexed_copies_but_not_name_only(
 
 
 def test_locations_is_client_authorized_and_validates_batch(env):
-    from fastapi import HTTPException
 
     assert classify('POST', '/api/library/locations') == CLIENT
     for bad in (None, {}, 'songs', [None], [SONG] * 201, [dict(file=[])]):
@@ -222,8 +229,6 @@ def test_locations_is_client_authorized_and_validates_batch(env):
 def test_real_catalog_membership_without_m3u_respects_collection_owner(
     env, monkeypatch
 ):
-    from downtify.playlist_catalog import PlaylistCatalog
-    from tests.test_library_visibility import _request
 
     root, index, downloader = env
     rel = 'My Playlist#1/Ana - One.mp3'
@@ -250,7 +255,6 @@ def test_real_catalog_membership_without_m3u_respects_collection_owner(
     'kind', ['deleted', 'hidden', 'outside', 'symlink', 'forged']
 )
 def test_unavailable_files_never_claim_collections(env, monkeypatch, kind):
-    from downtify.library_locations import track_locations
 
     root, index, downloader = env
     rel = 'Mix/one.mp3'
@@ -309,7 +313,6 @@ def test_deleted_file_after_cached_snapshot_is_not_downloaded(env):
 
 
 def test_source_lookup_never_calls_provider(env, monkeypatch):
-    from downtify import deezer, spotify
 
     def forbidden(*args, **kwargs):
         raise AssertionError(
@@ -324,8 +327,6 @@ def test_source_lookup_never_calls_provider(env, monkeypatch):
 
 
 def test_actual_hidden_rule_applies_to_locations(env, monkeypatch):
-    from downtify.library_visibility import KIND_TRACK, LibraryVisibility
-    from tests.test_library_visibility import _request
 
     root, index, downloader = env
     rel = 'Mix/one.mp3'
@@ -344,7 +345,6 @@ def test_actual_hidden_rule_applies_to_locations(env, monkeypatch):
 
 
 def test_disc_number_conflict_is_not_complete_fingerprint(env):
-    from downtify.library_locations import track_locations
 
     root, index, downloader = env
     rel = 'Other/one.mp3'
@@ -373,12 +373,6 @@ def test_disc_number_conflict_is_not_complete_fingerprint(env):
 def test_album_only_and_shared_manual_playlists_use_same_physical_album_file(
     env,
 ):
-    from mutagen.id3 import ID3, TDRC
-
-    from downtify.manual_playlists import (
-        create_manual_playlist,
-        edit_manual_playlist,
-    )
 
     root, index, downloader = env
     rel = (
@@ -410,7 +404,6 @@ def test_compilation_destination_uses_tagged_album_credit_but_library_route_arti
     env,
 ):
     root, index, downloader = env
-    from mutagen.id3 import ID3, TDRC, TPE2
 
     compilation = dict(SONG, album_artist='Various Artists')
     rel = (
