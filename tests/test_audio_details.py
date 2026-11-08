@@ -122,7 +122,7 @@ def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(t
 import pytest
 
 
-@pytest.mark.parametrize('suffix,args,codec,depth,lossless', [
+@pytest.mark.parametrize(('suffix', 'args', 'codec', 'depth', 'lossless'), [
     ('flac', ['-c:a', 'flac', '-sample_fmt', 's32'], 'flac', 24, True),
     ('m4a', ['-c:a', 'alac', '-sample_fmt', 's32p'], 'alac', 24, True),
     ('wav', ['-c:a', 'pcm_s16le'], 'pcm', 16, True),
@@ -147,7 +147,7 @@ def test_unknown_or_corrupt_audio_does_not_invent_facts(tmp_path):
     assert audio_details.read_audio_details(tmp_path / 'missing.mp3') == {}
 
 
-@pytest.mark.parametrize('args,expected,channels', [
+@pytest.mark.parametrize(('args', 'expected', 'channels'), [
     (['-joint_stereo', '0'], 'Stereo', 2),
     (['-ac', '1'], 'Mono', 1),
 ])

@@ -23,7 +23,7 @@ def _track(tmp_path, artist='Tyler, The Creator', artists=None, album_artist='')
     return path
 
 
-@pytest.mark.parametrize('artist,expected', [
+@pytest.mark.parametrize(('artist', 'expected'), [
     ('Tyler, The Creator', ['Tyler, The Creator']),
     ('AC/DC', ['AC/DC']),
     (r'A\B', [r'A\B']),
@@ -36,7 +36,7 @@ def test_unstructured_artist_only_splits_legacy_semicolons(tmp_path, artist, exp
     assert path.read_bytes() == before
 
 
-@pytest.mark.parametrize('credits,album_artist,expected', [
+@pytest.mark.parametrize(('credits', 'album_artist', 'expected'), [
     (['Tyler', 'The Creator'], 'Tyler, The Creator', ['Tyler, The Creator']),
     (['Tyler', 'The Creator', 'Daniel Caesar'], 'Tyler, The Creator',
      ['Tyler, The Creator', 'Daniel Caesar']),

@@ -29,7 +29,7 @@ def _local(album, explicit=None, n=2):
 
 
 # Untagged files read as explicit=False, so that is not evidence: explicit opens first.
-@pytest.mark.parametrize('local_explicit,expected', [(True, 'E'), (False, 'E'), (None, 'E')])
+@pytest.mark.parametrize(('local_explicit', 'expected'), [(True, 'E'), (False, 'E'), (None, 'E')])
 def test_explicit_and_clean_twins_resolve_instead_of_failing(tmp_path, monkeypatch, local_explicit, expected):
     sources = {'E' * 22: _source('Her Loss', True, 'E'), 'C' * 22: _source('Her Loss', False, 'C')}
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': [
@@ -73,7 +73,7 @@ def test_version_missing_a_local_file_is_not_offered(tmp_path, monkeypatch):
     assert [e['id'] for e in out['editions']] == ['E' * 22]
 
 
-@pytest.mark.parametrize('local_title,remote_title', [
+@pytest.mark.parametrize(('local_title', 'remote_title'), [
     ('Sad But Ambitious EP', 'Sad But Ambitious'),
     ('WORSHIP FRIENDSHIP (COMPILATION)', 'WORSHIP FRIENDSHIP'),
     ('Fourfit EP05', 'Fourfit EP 05'),

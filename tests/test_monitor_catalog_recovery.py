@@ -136,7 +136,7 @@ def test_incremental_snapshot_preserves_playable_existing_m3u_until_final(tmp_pa
     assert listed(downloader) == ['Artist - Beta.mp3']
 
 
-@pytest.mark.parametrize('structure,use_library', [(True, True), (True, False),
+@pytest.mark.parametrize(('structure', 'use_library'), [(True, True), (True, False),
                                                   (False, True), (False, False)])
 def test_existing_destination_is_missing_only_even_with_overwrite_on(
         tmp_path, monkeypatch, structure, use_library):

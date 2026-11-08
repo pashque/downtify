@@ -160,7 +160,8 @@ def test_legacy_sanitized_artist_folder_is_not_looked_up(tmp_path):
     legacy.parent.mkdir(parents=True)
     from mutagen.mp3 import MP3
     from mutagen.id3 import TIT2, TPE1, TALB, TPE2
-    import subprocess, shutil
+    import subprocess
+    import shutil
 
     audio = tmp_path / 'silence.mp3'
     subprocess.run(
@@ -211,7 +212,8 @@ def test_legacy_sanitized_artist_filename_is_not_looked_up_in_playlist_destinati
     legacy.parent.mkdir(parents=True)
     from mutagen.mp3 import MP3
     from mutagen.id3 import TIT2, TPE1
-    import subprocess, shutil
+    import subprocess
+    import shutil
 
     audio = tmp_path / 'silence.mp3'
     subprocess.run(

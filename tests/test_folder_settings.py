@@ -37,7 +37,7 @@ def save(payload):
     return asyncio.run(api.update_settings_endpoint(Request(payload), client_id=''))
 
 
-@pytest.mark.parametrize('structured,shared', [(True, True), (True, False), (False, True), (False, False)])
+@pytest.mark.parametrize(('structured', 'shared'), [(True, True), (True, False), (False, True), (False, False)])
 def test_toggle_update_resets_template_and_hot_updates(settings_state, structured, shared):
     result = save({'folder_structure': structured, 'playlist_use_library': shared, 'output': 'stale'})
     expected = FULL if structured else FLAT
@@ -58,7 +58,7 @@ def test_toggle_update_resets_template_and_hot_updates(settings_state, structure
     assert result['output'] == expected
 
 
-@pytest.mark.parametrize('key,value', [('folder_structure', 'false'), ('folder_structure', 1), ('playlist_use_library', None), ('playlist_use_library', 'true'), ('playlist_use_library', 0)])
+@pytest.mark.parametrize(('key', 'value'), [('folder_structure', 'false'), ('folder_structure', 1), ('playlist_use_library', None), ('playlist_use_library', 'true'), ('playlist_use_library', 0)])
 def test_toggle_validation_is_atomic(settings_state, key, value):
     before = dict(settings_state.settings)
     with pytest.raises(HTTPException) as error:
@@ -69,7 +69,7 @@ def test_toggle_validation_is_atomic(settings_state, key, value):
     assert not settings_state.settings_path.exists()
 
 
-@pytest.mark.parametrize('structured,shared,expected', [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
+@pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_shared_playlist_routing(settings_state, structured, shared, expected, monkeypatch, tmp_path):
     from downtify import monitor
     from downtify.folder_settings import settings_use_shared_playlists
@@ -109,7 +109,7 @@ def test_property_overrides_legacy_flags(settings_state, monkeypatch):
     assert api._organize_enabled() is False
 
 
-@pytest.mark.parametrize('structured,shared,expected_subdir', [(None, True, 'Mix'), (True, True, None), (True, False, 'Mix'), (False, True, 'Mix'), (False, False, None)])
+@pytest.mark.parametrize(('structured', 'shared', 'expected_subdir'), [(None, True, 'Mix'), (True, True, None), (True, False, 'Mix'), (False, True, 'Mix'), (False, False, None)])
 def test_batch_only_passes_own_folder_in_separate_mode(settings_state, monkeypatch, structured, shared, expected_subdir):
     d = settings_state.downloader
     d.folder_structure, d.playlist_use_library = structured, shared
@@ -134,7 +134,7 @@ def test_main_passes_storage_settings_to_downloader():
     assert {'folder_structure', 'playlist_use_library'} <= {kw.arg for kw in constructors[0].keywords}
 
 
-@pytest.mark.parametrize('structured,shared,expected', [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
+@pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_library_delete_only_scans_owned_playlist_folder(tmp_path, structured, shared, expected):
     from downtify.library_delete import delete_playlist_from_library
     from downtify.playlist_catalog import PlaylistCatalog
@@ -155,7 +155,7 @@ def test_library_delete_only_scans_owned_playlist_folder(tmp_path, structured, s
     assert unrelated.exists() is expected
 
 
-@pytest.mark.parametrize('structured,shared,expected', [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
+@pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
 def test_library_reconcile_m3u_uses_storage_policy(settings_state, tmp_path, structured, shared, expected):
     from downtify.library_reconcile import refresh_playlists_after_moves
     from downtify.playlist_catalog import PlaylistCatalog

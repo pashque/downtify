@@ -3,7 +3,7 @@ import pytest
 from downtify import artist_profile as ap
 
 
-@pytest.mark.parametrize('a,b', [('AC/DC', 'ACDC'), ('/', '?'), ('?', '*'), ('A+B', 'AB')])
+@pytest.mark.parametrize(('a', 'b'), [('AC/DC', 'ACDC'), ('/', '?'), ('?', '*'), ('A+B', 'AB')])
 def test_profile_and_top_cache_paths_do_not_collapse(a, b, tmp_path):
     assert ap._profile_path_for(tmp_path, a) != ap._profile_path_for(tmp_path, b)
     assert ap.profile_top_songs_path_for(tmp_path, a) != ap.profile_top_songs_path_for(tmp_path, b)

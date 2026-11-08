@@ -64,7 +64,7 @@ def test_lightweight_album_index_carries_authoritative_type(tmp_path, kind):
 
 
 @pytest.mark.parametrize('fmt', CODECS)
-@pytest.mark.parametrize('tag, expected', [('album', 'album'), ('single', 'single'), (' EP ', 'ep'),
+@pytest.mark.parametrize(('tag', 'expected'), [('album', 'album'), ('single', 'single'), (' EP ', 'ep'),
                                           ('compilation', 'compilation'), ('bootleg', ''), ('', '')])
 def test_real_tags_are_authoritative_without_modifying_files(tmp_path, fmt, tag, expected):
     path = _fixture(tmp_path, fmt, tag)

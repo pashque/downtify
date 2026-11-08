@@ -73,7 +73,7 @@ def test_find_match_album_fallback_never_title_only(monkeypatch):
     assert providers.find_match({'artists': ['|||'], 'name': 'Same Song', 'album_name': 'Album'}) == (None, None)
 
 
-@pytest.mark.parametrize('target,candidate', [('A', 'A&B'), ('B', 'A&B'), ('+', '+++'), ('Straße', 'Strasse'), ('|||', 'Normal')])
+@pytest.mark.parametrize(('target', 'candidate'), [('A', 'A&B'), ('B', 'A&B'), ('+', '+++'), ('Straße', 'Strasse'), ('|||', 'Normal')])
 def test_provider_credit_tokens_do_not_invent_identity(target, candidate):
     assert not providers._artists_overlap([target], _hit(candidate))
 
@@ -92,7 +92,7 @@ def test_provider_features_keep_primary_not_shared_guest():
     assert providers._artists_overlap(['|||', 'Guest'], _hit('||| feat. Guest'))
 
 
-@pytest.mark.parametrize('left,right', [('Song', 'Song+'), ('+', '!!!'), ('|', '||'), ('Song', 'Song (Live)'), ('Song', 'Song (Remix)')])
+@pytest.mark.parametrize(('left', 'right'), [('Song', 'Song+'), ('+', '!!!'), ('|', '||'), ('Song', 'Song (Live)'), ('Song', 'Song (Remix)')])
 def test_song_key_preserves_recording_versions(left, right):
     assert catalog.song_key('Artist', left) != catalog.song_key('Artist', right)
 
@@ -178,7 +178,7 @@ def test_lookup_rejects_known_artist_id_contradiction(monkeypatch):
     assert catalog.lookup_library_songs(None, [{'artists': ['|||'], 'artist_ids': ['right'], 'title': 'Same Song'}]) == []
 
 
-@pytest.mark.parametrize('left,right', [('Song', 'Song+'), ('Song', 'Songbird'), ('+', '!!!'), ('|', '||'), ('Song', 'Song (Live)'), ('Song', 'Song (Remix)')])
+@pytest.mark.parametrize(('left', 'right'), [('Song', 'Song+'), ('Song', 'Songbird'), ('+', '!!!'), ('|', '||'), ('Song', 'Song (Live)'), ('Song', 'Song (Remix)')])
 def test_provider_titles_keep_distinct_recordings(left, right):
     assert not providers._titles_match(left, right)
 

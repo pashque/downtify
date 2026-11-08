@@ -170,7 +170,7 @@ def test_slskd_hit_validates_physical_file_and_external_symlink_fails(tmp_path):
     index = TrackIndex(tmp_path / 'library.db')
     song = {'song_id': SPOTIFY_ID, 'name': 'Track', 'artists': ['Artist']}
     d = Downloader(music, slskd_settings={'source_dir': str(root)})
-    stored = f'slskd/Artist - Track.mp3'
+    stored = 'slskd/Artist - Track.mp3'
     index.register(SPOTIFY_ID, stored)
     assert resolve_existing_download(d, song, subdir='Other', track_index=index) == (
         stored, 'Already in library')

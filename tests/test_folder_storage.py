@@ -9,7 +9,7 @@ FLAT = '{artists} - {title}.{output-ext}'
 SONG = dict(name='D4L', artists=['Future', 'Drake', 'Young Thug'], album_artist='Drake', album_name='Dark Lane Demo Tapes', release_date='2020-05-01', track_number=9, source='spotify', song_id='5fHrHoJKfCgBd35zwIBmUK')
 
 
-@pytest.mark.parametrize('structure,playlists', [(True, True), (True, False), (False, True), (False, False)])
+@pytest.mark.parametrize(('structure', 'playlists'), [(True, True), (True, False), (False, True), (False, False)])
 def test_individual_tracks_use_global_structure(tmp_path, structure, playlists):
     d = Downloader(tmp_path, output_template=FULL if structure else FLAT, folder_structure=structure, playlist_use_library=playlists)
     target, prefix, basename = d._expected_location(SONG, None)
@@ -21,7 +21,7 @@ def test_individual_tracks_use_global_structure(tmp_path, structure, playlists):
         assert basename == 'Future, Drake, Young Thug - D4L'
 
 
-@pytest.mark.parametrize('structure,playlists,folder', [(True, True, 'Drake/Drake - Dark Lane Demo Tapes (2020)'), (True, False, 'My Playlist'), (False, True, 'My Playlist'), (False, False, '')])
+@pytest.mark.parametrize(('structure', 'playlists', 'folder'), [(True, True, 'Drake/Drake - Dark Lane Demo Tapes (2020)'), (True, False, 'My Playlist'), (False, True, 'My Playlist'), (False, False, '')])
 def test_playlist_routing_matrix(tmp_path, structure, playlists, folder):
     d = Downloader(tmp_path, output_template=FULL if structure else FLAT, folder_structure=structure, playlist_use_library=playlists)
     target, prefix, basename = d._expected_location(SONG, 'My Playlist')

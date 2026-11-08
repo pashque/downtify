@@ -1,6 +1,7 @@
 """Probe native input without ever adding a conversion postprocessor."""
 
-import shutil, subprocess
+import shutil
+import subprocess
 from pathlib import Path
 import pytest
 from downtify.source_audio_audit import audit_source
