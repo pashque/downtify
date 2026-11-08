@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -265,7 +266,7 @@ def test_trusted_local_total_disambiguates_single_from_ep(
     result = resolve_album_source(
         local, 'Album', TrackIndex(tmp_path / 'i.db')
     )
-    if total in (1, 3, None):
+    if total in {1, 3, None}:
         # A file's total names its source version but never hides another one:
         # every verified version is offered, fullest first.
         assert result['status'] == 'resolved'
@@ -374,7 +375,6 @@ def test_single_tag_cannot_disambiguate_equal_length_ep_family(
 
 
 def test_real_three_playlist_files_recover_full_fifteen(tmp_path, monkeypatch):
-    import json
 
     fixtures = Path(__file__).parent / 'fixtures'
     local = json.loads((fixtures / 'legacy_loyle_local.json').read_text())
@@ -548,7 +548,8 @@ def test_lookup_uses_verified_visible_identity_not_client_file_hints(
     )
 
     class Request:
-        async def json(self):
+        @staticmethod
+        async def json():
             return dict(
                 songs=[dict(SONG, file='untrusted.mp3')],
                 destination_status=True,
@@ -624,7 +625,6 @@ def test_one_track_ep_accepts_case_variant_provider_type(
 def test_actual_legacy_file_subset_recovers_full_source(
     tmp_path, monkeypatch, local_count
 ):
-    import json
 
     fixtures = Path(__file__).parent / 'fixtures'
     local = json.loads((fixtures / 'legacy_loyle_local.json').read_text())[
@@ -658,7 +658,6 @@ def test_actual_legacy_file_subset_recovers_full_source(
 def test_actual_library_samples_with_physical_tag_totals(
     tmp_path, monkeypatch, sample_index
 ):
-    import json
 
     sample = json.loads(
         (

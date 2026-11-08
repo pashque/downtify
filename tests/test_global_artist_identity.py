@@ -56,18 +56,20 @@ def _hit(artist, video='rightvideo01', artist_id=None):
 @pytest.mark.parametrize('artist', ['|', '||', '|||', '!!!', '+++', '東京'])
 def test_find_match_never_substitutes_symbol_artist(monkeypatch, artist):
     class FakeYtm:
-        def search(self, *args, **kwargs):
+        @staticmethod
+        def search(*args, **kwargs):
             return [_hit('Unrelated Artist', 'wrongvideo1'), _hit(artist)]
-    monkeypatch.setattr(providers, '_ytm', lambda: FakeYtm())
+    monkeypatch.setattr(providers, '_ytm', FakeYtm)
     monkeypatch.setattr(providers, '_youtube_search', lambda *a: [])
     assert providers.find_match({'artists': [artist], 'name': 'Same Song', 'duration': 180})[0] == 'rightvideo01'
 
 
 def test_find_match_album_fallback_never_title_only(monkeypatch):
     class FakeYtm:
-        def search(self, *args, **kwargs):
+        @staticmethod
+        def search(*args, **kwargs):
             return []
-    monkeypatch.setattr(providers, '_ytm', lambda: FakeYtm())
+    monkeypatch.setattr(providers, '_ytm', FakeYtm)
     monkeypatch.setattr(providers, '_youtube_search', lambda *a: [])
     monkeypatch.setattr(providers, '_album_browse_id_from_search', lambda *a: 'album')
     monkeypatch.setattr(providers, '_cached_album_tracks_and_count', lambda *a: ([_hit('Unrelated Artist')], 1))
@@ -135,9 +137,10 @@ def test_lookup_unindexed_ambiguous_album_is_not_recording_identity(monkeypatch)
 
 def test_find_match_structured_symbol_ids(monkeypatch):
     class FakeYtm:
-        def search(self, *a, **kw):
+        @staticmethod
+        def search(*a, **kw):
             return [_hit('|||', 'wrongvideo1', 'UCwrong'), _hit('Alias', 'rightvideo01', 'UCknown')]
-    monkeypatch.setattr(providers, '_ytm', lambda: FakeYtm())
+    monkeypatch.setattr(providers, '_ytm', FakeYtm)
     monkeypatch.setattr(providers, '_youtube_search', lambda *a: [])
     assert providers.find_match({'artists': [{'name': '|||', 'id': 'UCknown'}], 'name': 'Same Song', 'duration': 180})[0] == 'rightvideo01'
     assert providers.find_match({'artists': ['|||'], 'artist_ids': ['UCknown'], 'source': 'youtube', 'name': 'Same Song', 'duration': 180})[0] == 'rightvideo01'
@@ -146,9 +149,10 @@ def test_find_match_structured_symbol_ids(monkeypatch):
 @pytest.mark.parametrize('artists', [[], [''], ['  ']])
 def test_find_match_without_artist_safely_unmatched(monkeypatch, artists):
     class FakeYtm:
-        def search(self, *a, **kw):
+        @staticmethod
+        def search(*a, **kw):
             return [_hit('Unrelated')]
-    monkeypatch.setattr(providers, '_ytm', lambda: FakeYtm())
+    monkeypatch.setattr(providers, '_ytm', FakeYtm)
     monkeypatch.setattr(providers, '_youtube_search', lambda *a: [])
     assert providers.find_match({'artists': artists, 'name': 'Same Song'}) == (None, None)
 
@@ -196,9 +200,10 @@ def test_provider_never_revives_rejected_audio_variant(monkeypatch, album_name):
     row['title'] = 'Same Song (Nightcore)'
 
     class FakeYtm:
-        def search(self, *a, **kw):
+        @staticmethod
+        def search(*a, **kw):
             return [row]
-    monkeypatch.setattr(providers, '_ytm', lambda: FakeYtm())
+    monkeypatch.setattr(providers, '_ytm', FakeYtm)
     monkeypatch.setattr(providers, '_youtube_search', lambda *a: [])
     monkeypatch.setattr(providers, '_album_browse_id_from_search', lambda *a: 'album')
     monkeypatch.setattr(providers, '_cached_album_tracks_and_count', lambda *a: ([row], 1))

@@ -23,6 +23,8 @@ from downtify.library_metadata import (
 from downtify.library_metadata_cache import META_VERSION, LibraryMetadataCache
 from downtify.sqlite_utils import connect_sqlite
 
+EMPTY_TEXT = ''
+
 FFMPEG = shutil.which('ffmpeg')
 CODECS = {'mp3': 'libmp3lame', 'm4a': 'aac', 'flac': 'flac', 'ogg': 'libvorbis', 'opus': 'libopus'}
 
@@ -158,7 +160,7 @@ def test_one_local_track_of_partial_album_is_never_inferred_as_single(tmp_path, 
 
 
 def test_missing_or_broken_metadata_has_unknown_release_type(tmp_path):
-    assert read_audio_metadata(tmp_path / 'missing.mp3').get('release_type') == ''
+    assert read_audio_metadata(tmp_path / 'missing.mp3').get('release_type') == EMPTY_TEXT
     path = tmp_path / 'Artist - Title - EP.flac'
     path.write_bytes(b'not audio')
-    assert library_entry_for_file(path.name, path).get('release_type') == ''
+    assert library_entry_for_file(path.name, path).get('release_type') == EMPTY_TEXT

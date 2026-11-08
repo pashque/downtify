@@ -55,7 +55,7 @@ def test_explicit_redownload_bypasses_existing_copy_guard_without_source_resolut
     d = Downloader(tmp_path)
     calls = []
     monkeypatch.setattr(d, '_resolve_source', lambda *a: calls.append('source'))
-    with pytest.raises(Exception):
+    with pytest.raises(TypeError):
         d.download({'name': 'Song', 'artists': ['Artist'], 'downtify_download_mode': 'redownload'})
     assert calls == ['source']
     assert target.read_bytes() == original

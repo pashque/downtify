@@ -241,17 +241,10 @@ def test_process_batch_writes_m3u_under_explicit_playlist_name(monkeypatch):
 
     written = {}
 
-    def fake_write_m3u(
-        download_dir,
-        playlist_name,
-        entries,
-        *,
-        playlist_subdir=None,
-        slskd_dir=None,
-        preserve_existing=False,
-    ):
+    def fake_write_m3u(download_dir, playlist_name, entries, **options):
+        assert set(options) <= {'playlist_subdir', 'slskd_dir', 'preserve_existing'}
         written['playlist_name'] = playlist_name
-        written['playlist_subdir'] = playlist_subdir
+        written['playlist_subdir'] = options.get('playlist_subdir')
         written['entries'] = list(entries)
         return download_dir / 'Playlists' / f'{playlist_name}.m3u', len(
             written['entries']

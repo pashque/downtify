@@ -15,7 +15,8 @@ class _NoLookups:
     def __init__(self, *_args):
         pass
 
-    def collect(self):
+    @staticmethod
+    def collect():
         return downloader_module._LookupResults(None, None, None)
 
     def cancel(self):

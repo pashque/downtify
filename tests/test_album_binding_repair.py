@@ -75,6 +75,16 @@ def test_dry_run_and_atomic_alias_repair_preserve_audio_and_original_binding(
     assert Path(out['backup']).is_file()
 
 
+EXPECTED_ERRORS = {
+    'hash': 'File hash changed',
+    'title': 'No unambiguous complete track fingerprint',
+    'artist': 'No unambiguous complete track fingerprint',
+    'duration': 'No unambiguous complete track fingerprint',
+    'position': 'No unambiguous complete track fingerprint',
+    'missing': 'Invalid repair manifest',
+}
+
+
 @pytest.mark.parametrize(
     'fault', ['hash', 'title', 'artist', 'duration', 'position', 'missing']
 )
@@ -92,7 +102,7 @@ def test_invalid_manifest_or_fingerprint_cannot_write(case, fault):
         songs[0]['track_number'] = 2
     if fault == 'missing':
         plan = []
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=EXPECTED_ERRORS[fault]):
         repair_bindings(ctx, index, rows, songs, plan, dry_run=False)
     assert not index.source_copies_for_song(songs[0])
 

@@ -1,6 +1,8 @@
 """Per-request output formats never change the shared downloader settings."""
 import asyncio
+import json
 import shutil
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -19,7 +21,6 @@ SONG = dict(song_id='format-test', source='deezer', name='Song', artists=['Artis
 
 def _write_valid_flac(path):
     """Create a tiny, tagged FLAC fixture entirely offline with ffmpeg."""
-    import subprocess
 
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
@@ -65,7 +66,8 @@ def test_override_acquires_separate_format_without_deleting_mp3(tmp_path, monkey
         def __enter__(self): return self
         def __exit__(self, *args): pass
 
-        def add_post_processor(self, pp, **kwargs):
+        @staticmethod
+        def add_post_processor(pp, **kwargs):
             calls.append(pp.mapping)
 
         def download(self, urls):
@@ -121,7 +123,6 @@ def test_api_does_not_reuse_wrong_format_destination(tmp_path, monkeypatch, comp
 
 @pytest.mark.parametrize('completed', [False, True])
 def test_api_rejects_contradictory_existing_mp3_without_acquiring_or_registering(tmp_path, monkeypatch, completed):
-    import subprocess
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
     target = tmp_path / 'Artist - Song.mp3'
@@ -170,7 +171,8 @@ def test_batch_applies_top_level_format_to_all_rows(tmp_path, monkeypatch):
     class Request:
         scope = {'state': {}}
 
-        async def json(self): return {'songs': [dict(SONG)], 'audioFormat': 'flac'}
+        @staticmethod
+        async def json(): return {'songs': [dict(SONG)], 'audioFormat': 'flac'}
     asyncio.run(api.download_batch_endpoint(Request()))
     assert submit.call_args.args[0][0]['downtify_audio_format'] == 'flac'
 
@@ -269,7 +271,8 @@ def test_album_endpoint_applies_audio_format(tmp_path, monkeypatch):
         scope = {'state': {}}
         headers = {'content-length': '22'}
 
-        async def json(self): return {'audioFormat': 'flac'}
+        @staticmethod
+        async def json(): return {'audioFormat': 'flac'}
     asyncio.run(api.download_album_endpoint(Request(), 'album-url'))
     assert run.call_args.args[0]['downtify_audio_format'] == 'flac'
 
@@ -336,7 +339,8 @@ def test_locked_download_preserves_exception_and_broadcasts_error(monkeypatch):
     # Exercise the exception boundary with a failing executor-backed download.
 
     class Loop:
-        async def run_in_executor(self, *args): raise error
+        @staticmethod
+        async def run_in_executor(*args): raise error
     with pytest.raises(RuntimeError, match='download failed'):
         asyncio.run(api._run_download_locked(dict(SONG), 'format-test', job, Loop()))
     assert job['status'] == 'error'
@@ -376,7 +380,8 @@ def test_batch_validates_formats_before_queueing(tmp_path, monkeypatch, payload)
     class Request:
         scope = {'state': {}}
 
-        async def json(self): return payload
+        @staticmethod
+        async def json(): return payload
     with pytest.raises(HTTPException) as exc:
         asyncio.run(api.download_batch_endpoint(Request()))
     assert exc.value.status_code == 400
@@ -385,8 +390,6 @@ def test_batch_validates_formats_before_queueing(tmp_path, monkeypatch, payload)
 
 def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
     """Offline lossy-source conversion: a FLAC container does not restore fidelity."""
-    import json
-    import subprocess
 
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('ffmpeg and ffprobe required')
@@ -419,7 +422,6 @@ def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
 
 
 def test_local_provider_format_override_copies_and_converts_without_touching_source(tmp_path, monkeypatch):
-    import subprocess
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg required')
     source = tmp_path / 'incoming.mp3'

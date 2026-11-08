@@ -268,7 +268,7 @@ def test_unavailable_files_never_claim_collections(env, monkeypatch, kind):
         (root / rel).unlink()
     elif kind == 'hidden':
         rows = []
-    elif kind in ('outside', 'symlink'):
+    elif kind in {'outside', 'symlink'}:
         outside = root.parent / 'outside.mp3'
         outside.write_bytes(b'private')
         if kind == 'outside':

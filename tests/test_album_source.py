@@ -7,9 +7,12 @@ from downtify.album_source import resolve_album_source
 from downtify.auth import CLIENT, classify
 from downtify.library_visibility import album_key
 from downtify.track_index import TrackIndex
+from tests import test_library_visibility as _visibility
 from tests.test_download_modes import SONG
 from tests.test_library_visibility import _request
-from tests.test_library_visibility import library as library
+
+# Reuse the visibility suite's library fixture under the same name.
+library = _visibility.library
 
 
 @pytest.fixture(autouse=True)

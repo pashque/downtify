@@ -353,7 +353,8 @@ def test_library_lookup_reports_destination_without_hiding_other_copy(
     )
 
     class Request:
-        async def json(self):
+        @staticmethod
+        async def json():
             return {'songs': [SONG], 'destination_status': True}
 
     result = asyncio.run(api.library_lookup(Request()))

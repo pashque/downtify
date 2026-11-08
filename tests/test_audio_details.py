@@ -117,15 +117,16 @@ def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(t
         assert exc.value.status_code == 404
 
 
-@pytest.mark.parametrize(('suffix', 'args', 'codec', 'depth', 'lossless'), [
-    ('flac', ['-c:a', 'flac', '-sample_fmt', 's32'], 'flac', 24, True),
-    ('m4a', ['-c:a', 'alac', '-sample_fmt', 's32p'], 'alac', 24, True),
-    ('wav', ['-c:a', 'pcm_s16le'], 'pcm', 16, True),
-    ('m4a', ['-c:a', 'aac'], 'aac', None, False),
-    ('ogg', ['-c:a', 'libvorbis'], 'vorbis', None, False),
-    ('opus', ['-c:a', 'libopus'], 'opus', None, False),
+@pytest.mark.parametrize(('suffix', 'args', 'expected'), [
+    ('flac', ['-c:a', 'flac', '-sample_fmt', 's32'], ('flac', 24, True)),
+    ('m4a', ['-c:a', 'alac', '-sample_fmt', 's32p'], ('alac', 24, True)),
+    ('wav', ['-c:a', 'pcm_s16le'], ('pcm', 16, True)),
+    ('m4a', ['-c:a', 'aac'], ('aac', None, False)),
+    ('ogg', ['-c:a', 'libvorbis'], ('vorbis', None, False)),
+    ('opus', ['-c:a', 'libopus'], ('opus', None, False)),
 ])
-def test_codec_facts_and_bit_depth_only_for_lossless(tmp_path, suffix, args, codec, depth, lossless):
+def test_codec_facts_and_bit_depth_only_for_lossless(tmp_path, suffix, args, expected):
+    codec, depth, lossless = expected
     details = audio_details.read_audio_details(generate(tmp_path / f'file.{suffix}', *args))
     assert details['codec'] == codec
     assert details['channels'] == 2

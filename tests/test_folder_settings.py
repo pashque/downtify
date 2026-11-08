@@ -77,8 +77,9 @@ def test_toggle_validation_is_atomic(settings_state, key, value):
     assert not settings_state.settings_path.exists()
 
 
-@pytest.mark.parametrize(('structured', 'shared', 'expected'), [(True, True, True), (True, False, False), (False, True, False), (False, False, True)])
-def test_shared_playlist_routing(settings_state, structured, shared, expected, monkeypatch, tmp_path):
+@pytest.mark.parametrize(('routing', 'expected'), [((True, True), True), ((True, False), False), ((False, True), False), ((False, False), True)])
+def test_shared_playlist_routing(settings_state, routing, expected, monkeypatch, tmp_path):
+    structured, shared = routing
     settings_state.settings.update(folder_structure=structured, playlist_use_library=shared,
                                    organize_by_artist=False, organize_by_album=False)
     d = settings_state.downloader

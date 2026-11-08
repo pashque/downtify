@@ -1,5 +1,7 @@
 from downtify import deezer, discover, external_library
 
+EMPTY_TEXT = ''
+
 
 def test_discovery_preserves_symbol_artists_and_distinct_release_titles():
     assert discover.artist_key('AC/DC') != discover.artist_key('ACDC')
@@ -21,15 +23,17 @@ def test_preview_never_uses_another_punctuation_artist(monkeypatch):
 
     class Response:
         def raise_for_status(self): pass
-        def json(self): return {'data': [{'title': 'Song', 'artist': {'name': 'ACDC'}, 'preview': 'https://cdns-preview-1.dzcdn.net/stream/clip.mp3', 'duration': 180}]}
+        @staticmethod
+        def json(): return {'data': [{'title': 'Song', 'artist': {'name': 'ACDC'}, 'preview': 'https://cdns-preview-1.dzcdn.net/stream/clip.mp3', 'duration': 180}]}
     monkeypatch.setattr(deezer.httpx, 'get', lambda *args, **kwargs: Response())
-    assert deezer.find_track_preview('AC/DC', 'Song', 180) == ''
+    assert deezer.find_track_preview('AC/DC', 'Song', 180) == EMPTY_TEXT
 
 
 def test_symbol_only_deezer_name_is_valid(monkeypatch):
 
     class Response:
         def raise_for_status(self): pass
-        def json(self): return {'data': [{'id': 42, 'name': '|||', 'nb_fan': 100}]}
+        @staticmethod
+        def json(): return {'data': [{'id': 42, 'name': '|||', 'nb_fan': 100}]}
     monkeypatch.setattr(deezer.httpx, 'get', lambda *args, **kwargs: Response())
     assert deezer.resolve_artist_id('|||') == '42'

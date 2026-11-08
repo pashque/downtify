@@ -5,6 +5,8 @@ import pytest
 
 from downtify import artist_profile as ap
 
+EMPTY_TEXT = ''
+
 
 @pytest.mark.parametrize('kind', [ap.KIND_PHOTO, ap.KIND_BANNER])
 def test_new_art_paths_do_not_collapse_punctuation(tmp_path, kind):
@@ -46,7 +48,7 @@ def test_hashed_profile_still_requires_matching_stored_name(tmp_path, stored_nam
     path = ap._profile_path_for(tmp_path, 'AC/DC')
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({'name': stored_name, 'bio': 'not theirs'}))
-    assert ap.load_profile(tmp_path, 'AC/DC')['bio'] == ''
+    assert ap.load_profile(tmp_path, 'AC/DC')['bio'] == EMPTY_TEXT
 
 
 @pytest.mark.parametrize('stored_name', ['ACDC', None])

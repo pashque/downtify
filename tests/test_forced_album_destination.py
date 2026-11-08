@@ -47,7 +47,8 @@ def test_forced_status_is_separate_from_global_playable_rows(tmp_path, monkeypat
     monkeypatch.setattr(api, 'filter_paths_for_request', lambda paths, request: paths)
 
     class Request:
-        async def json(self):
+        @staticmethod
+        async def json():
             return {'songs': [SONG], 'destination_status': True, 'destination': 'album', 'playlist_name': 'Playlist'}
     result = asyncio.run(api.library_lookup(Request()))
     assert result['tracks'] == playable

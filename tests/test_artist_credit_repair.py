@@ -48,11 +48,11 @@ def test_repair_is_only_artist_list_and_preserves_file_identity(tmp_path):
 def test_repair_rejects_changed_credit_or_changed_file(tmp_path):
     p = data_file(tmp_path)
     old = p.read_bytes()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='preserve the full display credit'):
         prepare(old, ['Tyler', 'The Creator'], ['Someone'])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='Artist tags changed since planning'):
         prepare(old, ['Wrong'], ['Wrong'])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='File changed since planning'):
         apply_file(
             p,
             ['Tyler', 'The Creator'],
