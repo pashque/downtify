@@ -2,6 +2,12 @@
 import math
 import re
 import unicodedata
+from pathlib import Path
+
+from mutagen import File
+from mutagen.id3 import ID3
+
+from . import spotify
 
 
 def _exact(value):
@@ -58,15 +64,12 @@ def enrich_legacy_edition(row, path):
     """
     result = {k: v for k, v in row.items() if k not in {'album_track_total', 'album_type'}}
     try:
-        from pathlib import Path
         if Path(path).suffix.casefold() == '.mp3':
-            from mutagen.id3 import ID3
             tags = ID3(path)
             number = str(tags.get('TRCK', ''))
             kind = str(tags.get('TXXX:MusicBrainz Album Type', ''))
             total = ''
         else:
-            from mutagen import File
             audio = File(path, easy=True)
             tags = audio.tags if audio is not None else {}
             number = str((tags.get('tracknumber') or [''])[0])
@@ -129,11 +132,11 @@ def _loose_versions(local_tracks, title, skip=(), any_name=False, seen_types=Non
                 names.append(str(value).strip())
     lead = names[0] if names else ''
     queries = []
-    for q in (f'{lead} {title}', f'{lead} {_bare_title(title)}', str(title),
-              f"{lead} {rows[0].get('title')}"):
-        q = q.strip()
-        if q and q not in queries:
-            queries.append(q)
+    for raw_query in (f'{lead} {title}', f'{lead} {_bare_title(title)}', str(title),
+                      f"{lead} {rows[0].get('title')}"):
+        query = raw_query.strip()
+        if query and query not in queries:
+            queries.append(query)
     known = {_exact(n) for n in names}
     same, other = {}, {}
     for q in queries:
@@ -218,13 +221,13 @@ def _strict_versions(local_tracks, title):
     if not candidates or len(candidates) > 5:
         return unavailable
     verified = []
-    for album_id in candidates:
+    for album_id, candidate in candidates.items():
         # Spotify's Web API (and embedded tags) classifies EPs as singles,
         # while its search resource can expose the more specific EP type.
         def release_family(value):
             kind = _exact(value)
             return 'single' if kind == 'ep' else kind
-        if any(row.get('album_type') and release_family(row['album_type']) != release_family(candidates[album_id].get('type'))
+        if any(row.get('album_type') and release_family(row['album_type']) != release_family(candidate.get('type'))
                for row in local_tracks):
             continue
         try:
@@ -297,7 +300,8 @@ def _with_editions(ordered, edition=None, local_tracks=(), owned_ids=()):
         t.get('song_id') for t in m['tracks']))) if owned else ordered[0]
     chosen = next((m for m in ordered if m['id'] == edition), default)
     tracks = []
-    for song in chosen['tracks']:
+    for source_song in chosen['tracks']:
+        song = source_song
         credits = song.get('artists') or []
         # Album embed subtitles can flatten several artists into one string.
         # Restore boundaries only from an unambiguous matching local recording
@@ -324,9 +328,6 @@ def _with_editions(ordered, edition=None, local_tracks=(), owned_ids=()):
                                explicit=any(t.get('explicit') for t in m['tracks']),
                                release_type=m.get('release_type') or m['tracks'][0].get('release_type', ''))
                           for m in ordered])
-
-
-from . import spotify
 
 
 def discover_album_editions(album_id):

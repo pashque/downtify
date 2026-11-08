@@ -100,7 +100,7 @@ def restore_from_backup(backup_path: Path) -> dict[str, Any]:
             tags.add(TPE1(encoding=3, text=row['tpe1']))
             if row.get('artists_frame'):
                 tags.add(TXXX(encoding=3, desc='ARTISTS', text=row['artists_frame']))
-            tags.save(row['path'], v2_version=tags.version[1] if tags.version[1] in (3, 4) else 4)
+            tags.save(row['path'], v2_version=tags.version[1] if tags.version[1] in {3, 4} else 4)
             os.utime(row['path'], ns=(st.st_atime_ns, st.st_mtime_ns))
             restored += 1
         except Exception as exc:

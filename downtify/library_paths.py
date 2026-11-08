@@ -14,6 +14,17 @@ SLSKD_LIBRARY_PREFIX = 'slskd/'
 EXTERNAL_LIBRARY_PREFIX = 'ext/'
 
 
+AUDIO_EXTENSIONS = frozenset({
+    '.mp3',
+    '.m4a',
+    '.flac',
+    '.ogg',
+    '.wav',
+    '.aac',
+    '.opus',
+})
+
+
 def path_relative_to_anchor(file_path: Path, anchor: Path) -> str:
     """Return a stable path relative to *anchor* (may use ``..`` segments)."""
 

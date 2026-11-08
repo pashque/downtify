@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Optional
 import httpx
 from loguru import logger
 
+from downtify.folder_settings import settings_use_shared_playlists
+
 from . import m3u
 from .downloader import Downloader
 from .library_cache_keys import file_content_key
@@ -284,7 +286,6 @@ def refresh_playlists_after_moves(  # noqa: PLR0914
         and settings.get('slskd', {}).get('source_dir')
         else None
     )
-    from downtify.folder_settings import settings_use_shared_playlists
 
     organize = settings_use_shared_playlists(settings)
     mismatch_delete: Optional[TagMismatchDeleteContext] = None

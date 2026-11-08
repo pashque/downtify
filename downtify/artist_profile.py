@@ -41,12 +41,14 @@ them visually distinct from the profile-data half added later - and from
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import queue
 import re
 import tempfile
 import threading
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -54,8 +56,10 @@ from urllib.parse import urlsplit
 
 import httpx
 from loguru import logger
+from mutagen import File
 
 from . import apple_music, deezer, providers, spotify
+from .album_source import _title
 from .downloader import _sanitize
 from .image_size import image_dimensions
 from .podcasts import strip_html
@@ -237,7 +241,6 @@ def delete_image(download_dir: Path, name: str, kind: str) -> bool:
 
 
 def _artist_identity(name: str) -> str:
-    import unicodedata
     return ' '.join(unicodedata.normalize('NFKC', name).lower().split())
 
 
@@ -254,7 +257,6 @@ def _data_name_matches(data: Any, name: str) -> bool:
 
 
 def _hashed_sidecar_path(download_dir: Path, dirname: str, name: str, suffix: str) -> Path:
-    import hashlib
     identity = _artist_identity(name)
     digest = hashlib.sha256(identity.encode('utf-8')).hexdigest()
     return Path(download_dir) / dirname / f'{_sanitize(identity)[:32]}--{digest}{suffix}'
@@ -811,7 +813,6 @@ def _name_key(value: str) -> str:
 def _local_track_facts(download_dir: Path, filename: str) -> Optional[dict[str, Any]]:
     """Title and length of a library file from its own tags (read only)."""
     try:
-        from mutagen import File
         path = Path(download_dir) / str(filename).replace('\\', '/')
         audio = File(path, easy=True)
         if audio is None:
@@ -831,7 +832,6 @@ def _spotify_id_from_tracks(
     must have the same title, a length within 5 s, and be led by an artist
     whose name contains (or is contained in) *name*."""
 
-    from .album_source import _title
     key = _name_key(name)
     if not key:
         return None

@@ -12,6 +12,7 @@ import json
 import re
 import threading
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 from urllib.parse import urlsplit
@@ -1956,7 +1957,6 @@ def _search_suggestion_items(text: str) -> list[Any]:
 
 
 def _artist_name_identity(name: str) -> str:
-    import unicodedata
     return ' '.join(unicodedata.normalize('NFKC', name).lower().split())
 
 

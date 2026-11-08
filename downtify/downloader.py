@@ -9,12 +9,15 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Callable, Optional
 
 import httpx
+import mutagen
 import yt_dlp
 from loguru import logger
 from mutagen.flac import FLAC, Picture
@@ -37,6 +40,29 @@ from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from yt_dlp.postprocessor.ffmpeg import FFmpegExtractAudioPP
 
+from . import lyrics as lyrics_mod
+from . import spotify as spotify_mod
+from .content_advisory import (
+    ADVISORY_EXPLICIT,
+    ADVISORY_TAG,
+    MP4_ADVISORY_ATOM,
+)
+from .cookies import CookiesStore
+from .download_destination import skip_existing_for
+from .file_naming import sanitize_file_name
+from .folder_settings import STRUCTURED_OUTPUT
+from .itunes import fetch_genre as _fetch_itunes_genre
+from .library_metadata import _structured_artists
+from .library_paths import library_stored_path, slskd_dir_from_downloader
+from .m3u import sanitize_playlist_name
+from .providers import (
+    enrich_from_match,
+    find_match,
+    find_match_for_video,
+    find_match_youtube_only,
+)
+from .slskd_provider import download_from_slskd
+
 
 class DownloadResult(str):
     """String-compatible download path carrying acquisition provenance."""
@@ -50,26 +76,6 @@ class DownloadResult(str):
         value.skipped = skipped
         return value
 
-
-from . import lyrics as lyrics_mod
-from . import spotify as spotify_mod
-from .content_advisory import (
-    ADVISORY_EXPLICIT,
-    ADVISORY_TAG,
-    MP4_ADVISORY_ATOM,
-)
-from .cookies import CookiesStore
-from .file_naming import sanitize_file_name
-from .itunes import fetch_genre as _fetch_itunes_genre
-from .library_paths import library_stored_path, slskd_dir_from_downloader
-from .m3u import sanitize_playlist_name
-from .providers import (
-    enrich_from_match,
-    find_match,
-    find_match_for_video,
-    find_match_youtube_only,
-)
-from .slskd_provider import download_from_slskd
 
 # Extensions that count as "this song is already downloaded". Deliberately
 # excludes sidecars written next to the audio (.lrc, cover.jpg, .m3u) so a
@@ -688,7 +694,6 @@ class Downloader:
 
         template = self.output_template.replace('.{output-ext}', '')
         if song.get('downtify_destination') == 'album':
-            from .folder_settings import STRUCTURED_OUTPUT
             template = STRUCTURED_OUTPUT.replace('.{output-ext}', '')
         elif isinstance(self.folder_structure, bool) and (
             not self.folder_structure
@@ -839,7 +844,6 @@ class Downloader:
             return True
         if (self.folder_structure is True or forced_album) and not song.get('album_artist'):
             return False
-        from .folder_settings import STRUCTURED_OUTPUT
         template = STRUCTURED_OUTPUT if forced_album else self.output_template
         if (self.organize_by_album or '{album}' in template) and not song.get(
             'album_name'
@@ -861,7 +865,6 @@ class Downloader:
 
     def _validate_existing_copy(self, song: dict[str, Any], existing: str) -> None:
         """Reject occupied exact destinations unless readable identity agrees."""
-        from mutagen import File as MutagenFile
 
         candidate = Path(existing)
         path = candidate if candidate.is_absolute() else self.download_dir / candidate
@@ -875,7 +878,7 @@ class Downloader:
                 raise ValueError('destination missing or outside authorized roots')
             before = path.stat()
             identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-            audio = MutagenFile(str(path), easy=True)
+            audio = mutagen.File(str(path), easy=True)
             if audio is None:
                 raise ValueError('unreadable audio')
             # Mutagen may accept a parseable container/header without an audio
@@ -925,7 +928,6 @@ class Downloader:
             structured_known = False
             if song.get('artists_structured') is True and expected_artists:
                 try:
-                    from .library_metadata import _structured_artists
                     structured_artists = _structured_artists(path, audio)
                     structured_known = (
                         bool(structured_artists)
@@ -939,7 +941,7 @@ class Downloader:
                 if structured_known:
                     if artist != joined:
                         raise ValueError('artist tag contradicts requested structured credits')
-                elif artist not in (joined, *expected_artists):
+                elif artist not in {joined, *expected_artists}:
                     raise ValueError('artist tag contradicts requested track')
                 elif len(expected_artists) > 1 and artist in expected_artists:
                     # A single collaborator display tag cannot prove a full duo.
@@ -998,7 +1000,6 @@ class Downloader:
         returned instead (see :meth:`find_existing_download`).
         """
 
-        from .download_destination import skip_existing_for
         skip_existing = skip_existing_for(song, self.overwrite_existing_files)
         if skip_existing and self._can_resolve_path_early(song):
             with self._target_lock(song, subdir):
@@ -1199,7 +1200,6 @@ class Downloader:
             self._validate_audio_duration(source_path, expected_duration)
         requested_format = song.get('downtify_audio_format')
         if requested_format and source_path.suffix.lower() != '.' + requested_format:
-            from tempfile import TemporaryDirectory
             with TemporaryDirectory(prefix='.downtify-audio-', dir=self.download_dir) as staging:
                 staged = Path(staging) / ('source' + source_path.suffix)
                 shutil.copy2(source_path, staged)
@@ -1251,7 +1251,6 @@ class Downloader:
                         pass
                 staged_path = None
                 if not in_place:
-                    import tempfile
                     fd, staged_name = tempfile.mkstemp(
                         prefix='.downtify-local-', suffix=suffix, dir=target_dir
                     )
@@ -1435,10 +1434,9 @@ class Downloader:
     @staticmethod
     def _validate_audio_duration(path: Path, expected: float) -> None:
         """Measure staged audio before it can replace any library recording."""
-        from mutagen import File
 
         try:
-            audio = File(path)
+            audio = mutagen.File(path)
             actual = float(audio.info.length) if audio is not None else 0
         except Exception as exc:
             raise RuntimeError('Could not verify downloaded audio duration; file not saved') from exc
@@ -1464,14 +1462,12 @@ class Downloader:
         """Isolate conversions and validate automatic matches before publishing."""
         fmt = audio_format or song.get('downtify_audio_format') or self.audio_format
         expected_duration = self._automatic_target_duration(song)
-        from .download_destination import skip_existing_for
         missing_only = skip_existing_for(song, self.overwrite_existing_files)
         if (not missing_only and not song.get('downtify_audio_format')
                 and expected_duration is None):
             return self._fetch_audio(video_id, target_dir, basename, song=song,
                                      progress_cb=progress_cb, provider=provider,
                                      audio_format=audio_format)
-        from tempfile import TemporaryDirectory
         destination = target_dir / f'{basename}.{fmt}'
         redownload = song.get('downtify_download_mode') == 'redownload'
         # Redownload authorizes replacement only of the exact path object

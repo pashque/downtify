@@ -12,8 +12,11 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 
+from downtify.folder_settings import downloader_uses_shared_playlists
+
 from . import m3u, providers, spotify
 from .cover_cache import CoverArtCache
+from .download_destination import managed_destination
 from .downloader import (
     DOWNLOAD_EXECUTOR,
     Downloader,
@@ -35,7 +38,11 @@ from .playlist_catalog import PlaylistCatalog
 from .playlist_spotify_cache import PlaylistSpotifyCache
 from .podcasts import PodcastStore, sync_show
 from .sqlite_utils import ClosingConnection
-from .track_index import TrackIndex, normalize_spotify_track_id
+from .track_index import (
+    TrackIndex,
+    normalize_spotify_track_id,
+    resolve_existing_download,
+)
 from .track_owners import TrackOwners
 
 MONITOR_LOOP_INTERVAL = 60  # seconds between loop sweeps
@@ -934,8 +941,6 @@ async def check_playlist(
         def _make_cb(s: dict, name: str) -> ProgressCallback:
             return _progress_cb(s, name, broadcast, loop)
 
-        from .download_destination import managed_destination
-
         # Enrichment may reveal an existing target not resolvable from the
         # sparse playlist row. Keep the downloader's late check missing-only
         # without changing shared settings or the cached source track.
@@ -1041,8 +1046,6 @@ async def _split_new_tracks(
     unindexed files. Legacy storage keeps its overwrite/global-index policy.
     """
 
-    from .download_destination import managed_destination
-
     managed = managed_destination(downloader)
     new_tracks: list[dict[str, Any]] = []
     linked = 0
@@ -1109,7 +1112,6 @@ def _watch_file_at_destination(
     )
     if full is None:
         return False
-    from .download_destination import managed_destination
 
     if not managed_destination(downloader):
         return True
@@ -1125,9 +1127,6 @@ def _library_file_for(
     subdir: Optional[str] = None,
 ) -> Optional[str]:
     """Find a destination-aware copy, retaining legacy global-index semantics."""
-
-    from .download_destination import managed_destination
-    from .track_index import resolve_existing_download
 
     if managed_destination(downloader):
         result = resolve_existing_download(
@@ -1561,7 +1560,6 @@ def _regenerate_m3u(
     # When organize-by-artist/album is on the tracks live in those folders
     # rather than the per-playlist subfolder, so the M3U goes to the legacy
     # Playlists/ directory where its relative paths still resolve.
-    from downtify.folder_settings import downloader_uses_shared_playlists
 
     organize = downloader_uses_shared_playlists(downloader)
     path, _kept = m3u.write_m3u(
@@ -1588,8 +1586,6 @@ def _download_cover_for_watch(
     read back from a written M3U, so the artwork is in place while the
     folder fills up.
     """
-
-    from downtify.folder_settings import downloader_uses_shared_playlists
 
     organize = downloader_uses_shared_playlists(downloader)
     pl_subdir = m3u.sanitize_playlist_name(playlist.name)

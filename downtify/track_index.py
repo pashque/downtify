@@ -8,11 +8,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from .download_destination import (
+    managed_destination,
+    verified_destination_copy,
+)
 from .library_cache_keys import file_content_key
 from .library_paths import (
     locate_library_file,
     slskd_dir_from_downloader,
 )
+from .resource_identity import exact_name_key
 from .sqlite_utils import connect_sqlite
 
 _SPOTIFY_TRACK_ID = re.compile(r'^[a-zA-Z0-9]{22}$')
@@ -57,14 +62,12 @@ class TrackIndex:
         return connect_sqlite(self._path, row_factory=True)
 
     def album_preference(self, user_id: int, artist: str, title: str) -> Optional[str]:
-        from .resource_identity import exact_name_key
         with self._connect() as conn:
             row = conn.execute('SELECT edition FROM library_album_preferences WHERE user_id=? AND artist=? AND title=?',
                                (user_id, exact_name_key(artist), exact_name_key(title))).fetchone()
         return row['edition'] if row else None
 
     def set_album_preference(self, user_id: int, artist: str, title: str, edition: str) -> None:
-        from .resource_identity import exact_name_key
         if not _SPOTIFY_TRACK_ID.fullmatch(edition):
             raise ValueError('Invalid Spotify album ID')
         with self._connect() as conn:
@@ -410,8 +413,6 @@ def resolve_existing_download(
     download_dir = Path(downloader.download_dir)
     slskd_dir = slskd_dir_from_downloader(downloader)
 
-    from .download_destination import managed_destination
-
     def has_source_conflict(local: str, full_path: Path, requested_id: Optional[str]) -> bool:
         if track_index is None:
             return False
@@ -448,7 +449,6 @@ def resolve_existing_download(
         return requested_id in track_index.validated_source_copy_ids_for_path(full_path)
 
     if managed_destination(downloader) or song.get('downtify_destination') == 'album':
-        from .download_destination import verified_destination_copy
         local = (downloader.existing_filename_for(song, subdir=subdir)
                  or verified_destination_copy(downloader, song, subdir, track_index))
         if local:

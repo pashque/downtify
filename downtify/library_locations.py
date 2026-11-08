@@ -3,6 +3,7 @@ import math
 import re
 from pathlib import PurePosixPath
 
+from . import recording_equivalence
 from .library_catalog import album_artist_of, resolve_library_file
 from .resource_identity import exact_name_key
 from .track_index import normalize_spotify_track_id
@@ -54,14 +55,13 @@ def track_locations(ctx, songs, entries, downloader=None, track_index=None, play
         fp = _fingerprint(row, local=True)
         if fp:
             fingerprints.setdefault(fp[0], []).append((filename, fp[1]))
-    from .recording_equivalence import registry
     results = []
     for song in songs:
         key = str(song.get('song_id') or song.get('url') or song.get('file') or '')
         names = {song['file']} if song.get('file') in visible else set()
         ids = identities.get(song.get('file'), set()) if song.get('file') else {normalize_spotify_track_id(song)}
         for tid in ids:
-            for equivalent in registry.equivalent_tracks(tid):
+            for equivalent in recording_equivalence.registry.equivalent_tracks(tid):
                 names.update(by_id.get(equivalent, ()))
         # Once an exact source-bound file is established, its measured local
         # fingerprint may join another physical copy without trusting a client
@@ -71,7 +71,7 @@ def track_locations(ctx, songs, entries, downloader=None, track_index=None, play
             if anchor_fp:
                 for other, duration in fingerprints.get(anchor_fp[0], ()):
                     known = identities.get(other, set())
-                    proven = {value for tid in ids for value in registry.equivalent_tracks(tid)}
+                    proven = {value for tid in ids for value in recording_equivalence.registry.equivalent_tracks(tid)}
                     if abs(duration - anchor_fp[1]) <= 5 and (not known or known.intersection(proven)):
                         names.add(other)
         anchor = visible.get(song.get('file')) if song.get('file') else song

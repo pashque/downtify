@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from . import recording_equivalence
 from .catalog_worker import fold_library_entries
 from .library_cache_keys import file_content_key_from_name_and_size
 from .library_metadata import library_entry_for_file
 from .library_metadata_cache import LibraryMetadataCache
 from .library_paths import (
+    AUDIO_EXTENSIONS,
     ResolvedLibraryRoots,
     library_stored_path,
     locate_library_file,
@@ -29,20 +31,10 @@ from .library_paths_cache import (
     store_cached_track_entries,
 )
 from .playlist_catalog import PlaylistCatalog
-from .track_index import TrackIndex
+from .track_index import TrackIndex, normalize_spotify_track_id
 
 if TYPE_CHECKING:
     from .library_visibility import HiddenRules
-
-AUDIO_EXTENSIONS = frozenset({
-    '.mp3',
-    '.m4a',
-    '.flac',
-    '.ogg',
-    '.wav',
-    '.aac',
-    '.opus',
-})
 
 
 @dataclass(frozen=True)
@@ -689,8 +681,6 @@ def lookup_library_songs(
     page doesn't offer someone else's file as "already downloaded".
     """
 
-    from .track_index import normalize_spotify_track_id
-
     def identity(row: dict[str, Any]) -> tuple[str, str]:
         artist = primary_artist_of(row)
         title = str(row.get('title') or row.get('name') or '').strip()
@@ -716,14 +706,13 @@ def lookup_library_songs(
     identities = index.identities_for_files({str(e.get('file') or '') for e in entries}) if index else {}
     buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
     by_spotify_id: dict[str, list[dict[str, Any]]] = {}
-    from .recording_equivalence import registry
     for entry in entries:
         row = dict(entry)
         ids = set(identities.get(str(row.get('file') or ''), set()))
         stored_id = spotify_id(row)
         if stored_id:
             ids.add(stored_id)
-        ids = {equivalent for tid in ids for equivalent in registry.equivalent_tracks(tid)}
+        ids = {equivalent for tid in ids for equivalent in recording_equivalence.registry.equivalent_tracks(tid)}
         if ids:
             row['spotify_track_ids'] = sorted(ids)
             if len(ids) == 1:

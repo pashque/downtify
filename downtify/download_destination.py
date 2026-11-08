@@ -2,7 +2,7 @@
 from pathlib import PurePosixPath
 from typing import Any, Optional
 
-from .library_catalog import AUDIO_EXTENSIONS
+from .library_paths import AUDIO_EXTENSIONS
 
 
 def skip_existing_for(song: dict[str, Any], overwrite_default: bool) -> bool:

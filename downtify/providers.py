@@ -33,6 +33,7 @@ from ytmusicapi.navigation import (
 from ytmusicapi.parsers.library import parse_albums as _parse_ytm_albums
 
 from .file_naming import file_name_key
+from .library_catalog import artist_identity_key
 from .telemetry import json_log_blob, redact_sensitive_mapping
 
 
@@ -2608,7 +2609,6 @@ def _artists_overlap(
 
 def _norm_artist_name(name: str) -> str:
     """Exact normalized credit: names with and without The are not IDs."""
-    from .library_catalog import artist_identity_key
     return artist_identity_key(name)
 
 

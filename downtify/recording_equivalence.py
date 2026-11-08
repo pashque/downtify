@@ -11,6 +11,8 @@ import unicodedata
 from collections import OrderedDict
 from typing import Any
 
+from . import spotify
+
 
 def _norm(value: Any) -> str:
     return ' '.join(unicodedata.normalize('NFKC', str(value or '')).casefold().split())
@@ -98,7 +100,6 @@ def warm_source_equivalence(result: dict[str, Any], entries: list[dict[str, Any]
     missing = [tid for tid in ids if not registry.knows_track(tid)]
     if not missing:
         return
-    from . import spotify
     try:
         album_id, _ = spotify._album_ref_from_open_track_page(missing[0])
         if re.fullmatch(r'[A-Za-z0-9]{22}', str(album_id)):

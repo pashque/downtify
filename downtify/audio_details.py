@@ -93,7 +93,7 @@ def _read_cached(path: Path, stat_key: tuple[int, ...]) -> dict[str, Any]:
         return {}
     result = {key: value for key, value in audio_format(audio).items() if value}
     codec = result.get('codec', '')
-    if type(audio).__name__ == 'WAVE' and audio.info.audio_format in (1, 3):
+    if type(audio).__name__ == 'WAVE' and audio.info.audio_format in {1, 3}:
         codec = result['codec'] = 'pcm' if audio.info.audio_format == 1 else 'pcm_float'
     if codec == 'opus':
         # Opus decoding always uses 48 kHz; its header input rate is not
