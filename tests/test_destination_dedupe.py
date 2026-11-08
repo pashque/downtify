@@ -1,6 +1,5 @@
 """A playlist copy must not stand in for a missing album destination."""
 
-from pathlib import Path
 
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download
@@ -75,7 +74,6 @@ def test_artist_trailing_dots_are_preserved_in_generated_destination(tmp_path):
 def test_legacy_collision_with_wrong_tagged_artist_does_not_satisfy_album(
     tmp_path,
 ):
-    from mutagen import File
 
     d = Downloader(
         tmp_path / 'downloads',
@@ -100,8 +98,9 @@ def test_legacy_collision_with_wrong_tagged_artist_does_not_satisfy_album(
     )
     legacy.parent.mkdir(parents=True)
     # A valid tagged MP3 with the same filename but conflicting embedded artist.
-    from mutagen.mp3 import MP3
     import subprocess
+
+    from mutagen.mp3 import MP3
 
     audio = tmp_path / 'silence.mp3'
     subprocess.run(
@@ -125,7 +124,7 @@ def test_legacy_collision_with_wrong_tagged_artist_does_not_satisfy_album(
 
     shutil.copyfile(audio, legacy)
     mp3 = MP3(str(legacy))
-    from mutagen.id3 import TIT2, TPE1, TALB, TPE2
+    from mutagen.id3 import TALB, TIT2, TPE1, TPE2
 
     mp3.tags.add(TIT2(encoding=3, text='Actual title'))
     mp3.tags.add(TPE1(encoding=3, text='Wrong artist'))
@@ -158,10 +157,11 @@ def test_legacy_sanitized_artist_folder_is_not_looked_up(tmp_path):
         / '09. Fred again - D4L.mp3'
     )
     legacy.parent.mkdir(parents=True)
-    from mutagen.mp3 import MP3
-    from mutagen.id3 import TIT2, TPE1, TALB, TPE2
-    import subprocess
     import shutil
+    import subprocess
+
+    from mutagen.id3 import TALB, TIT2, TPE1, TPE2
+    from mutagen.mp3 import MP3
 
     audio = tmp_path / 'silence.mp3'
     subprocess.run(
@@ -210,10 +210,11 @@ def test_legacy_sanitized_artist_filename_is_not_looked_up_in_playlist_destinati
     }
     legacy = tmp_path / 'downloads' / 'My Playlist' / 'Fred again - D4L.mp3'
     legacy.parent.mkdir(parents=True)
-    from mutagen.mp3 import MP3
-    from mutagen.id3 import TIT2, TPE1
-    import subprocess
     import shutil
+    import subprocess
+
+    from mutagen.id3 import TIT2, TPE1
+    from mutagen.mp3 import MP3
 
     audio = tmp_path / 'silence.mp3'
     subprocess.run(
@@ -290,9 +291,9 @@ def test_same_destination_is_still_skipped(tmp_path):
     result = resolve_existing_download(
         d, SONG, subdir='My Playlist', track_index=index
     )
+    assert result
     assert (
-        result
-        and result[0] == 'My Playlist/Future, Drake, Young Thug - D4L.mp3'
+        result[0] == 'My Playlist/Future, Drake, Young Thug - D4L.mp3'
     )
 
 
@@ -316,6 +317,7 @@ def test_completed_playlist_job_does_not_satisfy_album_request(
     tmp_path, monkeypatch
 ):
     import asyncio
+
     from downtify import api
 
     d, index, old = setup_playlist(tmp_path)
@@ -350,6 +352,7 @@ def test_library_lookup_reports_destination_without_hiding_other_copy(
     tmp_path, monkeypatch
 ):
     import asyncio
+
     from downtify import api
 
     d, index, old = setup_playlist(tmp_path)

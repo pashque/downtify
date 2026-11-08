@@ -9,7 +9,10 @@ from mutagen.id3 import ID3, TXXX
 from mutagen.mp4 import MP4, MP4FreeForm
 
 from downtify.downloader import embed_metadata
-from downtify.library_metadata import library_entry_for_file, read_audio_metadata
+from downtify.library_metadata import (
+    library_entry_for_file,
+    read_audio_metadata,
+)
 
 FFMPEG = shutil.which('ffmpeg')
 CODECS = {'mp3': 'libmp3lame', 'm4a': 'aac', 'flac': 'flac', 'ogg': 'libvorbis', 'opus': 'libopus'}
@@ -76,7 +79,8 @@ def test_real_tags_are_authoritative_without_modifying_files(tmp_path, fmt, tag,
     assert meta['artists'] == entry['artists'] == ['Tyler, The Creator', 'Guest']
     for field in ('codec', 'bitrate', 'sample_rate', 'channels', 'duration'):
         assert entry[field] == meta[field]
-    assert meta['codec'] and meta['duration'] > 0
+    assert meta['codec']
+    assert meta['duration'] > 0
     assert meta['channels'] == 2
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
 
@@ -108,8 +112,11 @@ def test_release_type_survives_cold_and_warm_cache_and_listing(tmp_path, monkeyp
 
 
 def test_version_seven_rows_and_persisted_listing_are_invalidated(tmp_path):
-    from downtify.library_metadata_cache import LibraryMetadataCache, META_VERSION
     from downtify.library_listing_store import LibraryListingStore
+    from downtify.library_metadata_cache import (
+        META_VERSION,
+        LibraryMetadataCache,
+    )
     from downtify.sqlite_utils import connect_sqlite
 
     path = _fixture(tmp_path, 'mp3', 'single')

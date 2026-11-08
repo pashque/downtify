@@ -30,7 +30,6 @@ from .library_catalog import (
     list_library_entries,
     resolve_library_file,
 )
-from .resource_identity import exact_name_key
 from .library_metadata import library_entry_for_file
 from .library_paths import EXTERNAL_LIBRARY_PREFIX
 from .library_paths_cache import invalidate_library_paths_cache
@@ -42,6 +41,7 @@ from .library_upgrade import (
     _write_upgrade,
 )
 from .lyrics import read_track_lyrics, write_to_file
+from .resource_identity import exact_name_key
 
 MAX_EXTERNAL_FOLDERS = 20
 MAX_FOLDER_PATH_LEN = 1024

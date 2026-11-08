@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+
+import pytest
+
 from downtify.downloader import Downloader
 from downtify.library_paths import library_stored_path
 from downtify.track_index import (
@@ -29,7 +34,6 @@ def test_normalize_ignores_youtube_ids():
 
 
 def test_resolve_existing_prefers_global_library(tmp_path):
-    import subprocess
     download_dir = tmp_path / 'music'
     download_dir.mkdir()
     slskd_dir = tmp_path / 'slskd'
@@ -67,9 +71,6 @@ def test_resolve_existing_prefers_global_library(tmp_path):
 
 
 def test_existing_invalid_exact_copy_conflicts_before_registration(tmp_path):
-    import shutil
-    import subprocess
-    import pytest
 
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
@@ -92,9 +93,6 @@ def test_existing_invalid_exact_copy_conflicts_before_registration(tmp_path):
 
 
 def test_existing_valid_exact_copy_is_reused_and_absence_is_none(tmp_path):
-    import shutil
-    import subprocess
-    import pytest
 
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
@@ -117,7 +115,6 @@ def test_existing_valid_exact_copy_is_reused_and_absence_is_none(tmp_path):
 
 
 def test_reusing_unknown_import_does_not_register_source_from_tags(tmp_path):
-    import subprocess
     download_dir = tmp_path / 'music'
     download_dir.mkdir()
     target = download_dir / 'Artist - Track.mp3'
@@ -135,7 +132,6 @@ def test_reusing_unknown_import_does_not_register_source_from_tags(tmp_path):
 
 
 def test_reusing_stat_validated_source_copy_preserves_source_registration(tmp_path):
-    import subprocess
     download_dir = tmp_path / 'music'
     download_dir.mkdir()
     target = download_dir / 'Artist - Track.mp3'
@@ -155,8 +151,6 @@ def test_reusing_stat_validated_source_copy_preserves_source_registration(tmp_pa
 
 
 def test_slskd_hit_validates_physical_file_and_external_symlink_fails(tmp_path):
-    import subprocess
-    import pytest
 
     music = tmp_path / 'music'
     root = tmp_path / 'slskd'
@@ -184,8 +178,6 @@ def test_slskd_hit_validates_physical_file_and_external_symlink_fails(tmp_path):
 
 
 def test_real_hit_requires_validator(tmp_path, monkeypatch):
-    import subprocess
-    import pytest
 
     music = tmp_path / 'music'
     music.mkdir()

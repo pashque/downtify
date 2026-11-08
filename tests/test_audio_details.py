@@ -2,6 +2,8 @@
 import hashlib
 import subprocess
 
+import pytest
+
 from downtify import audio_details
 
 
@@ -33,11 +35,12 @@ def test_compressed_bitrate_is_measured_not_nominal_or_decoded_pcm_rate(tmp_path
 
 
 def test_endpoint_preserves_external_and_slskd_roots_but_rejects_escape(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
     from downtify import api
     from downtify.library_catalog import LibraryContext
     from downtify.library_paths import library_stored_path
-    from starlette.requests import Request
-    from fastapi import HTTPException
     root, extra, slskd, outside = [tmp_path / name for name in ('downloads', 'extra', 'slskd', 'outside')]
     for folder in (root, extra, slskd, outside):
         folder.mkdir()
@@ -99,10 +102,11 @@ def test_audio_details_endpoint_is_available_to_authenticated_library_clients():
 
 
 def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
     from downtify import api
     from downtify.library_catalog import LibraryContext
-    from starlette.requests import Request
-    from fastapi import HTTPException
     path = generate(tmp_path / 'track.mp3', '-c:a', 'libmp3lame')
     monkeypatch.setattr(api, 'library_context', lambda: LibraryContext(download_dir=tmp_path))
     monkeypatch.setattr(api, 'allowed_entry_keys', lambda request: None)
@@ -117,9 +121,6 @@ def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(t
         with pytest.raises(HTTPException) as exc:
             api.library_audio_details(request, bad)
         assert exc.value.status_code == 404
-
-
-import pytest
 
 
 @pytest.mark.parametrize(('suffix', 'args', 'codec', 'depth', 'lossless'), [

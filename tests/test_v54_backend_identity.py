@@ -1,5 +1,4 @@
 """Offline regressions for complete provider releases and literal identities."""
-import pytest
 from downtify import spotify
 
 

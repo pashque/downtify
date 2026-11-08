@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from downtify.downloader import Downloader
 from downtify.playlist_batches import (
@@ -140,7 +142,6 @@ def _snapshot_fixture(tmp_path: Path):
     (download_dir / 'Mix').mkdir(parents=True)
     indexed = download_dir / 'Artist - Indexed.mp3'
     if not shutil.which('ffmpeg'):
-        import pytest
         pytest.skip('ffmpeg unavailable')
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
                     'sine=frequency=440:duration=0.25', '-metadata', 'title=Indexed',

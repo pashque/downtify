@@ -1,8 +1,10 @@
 import hashlib
+
 import pytest
-from downtify.track_index import TrackIndex
-from downtify.library_catalog import LibraryContext
+
 from downtify.album_binding_repair import repair_bindings
+from downtify.library_catalog import LibraryContext
+from downtify.track_index import TrackIndex
 
 
 @pytest.fixture
@@ -56,11 +58,13 @@ def test_dry_run_and_atomic_alias_repair_preserve_audio_and_original_binding(
     index.register('B' * 22, 'one.mp3')
     before = file.read_bytes()
     dry = repair_bindings(ctx, index, rows, songs, plan)
-    assert dry['candidates'] == 1 and not index.source_copies_for_song(
+    assert dry['candidates'] == 1
+    assert not index.source_copies_for_song(
         songs[0]
     )
     out = repair_bindings(ctx, index, rows, songs, plan, dry_run=False)
-    assert out['applied'] == 1 and index.source_copies_for_song(songs[0]) == [
+    assert out['applied'] == 1
+    assert index.source_copies_for_song(songs[0]) == [
         'one.mp3'
     ]
     assert index.lookup('B' * 22) == 'one.mp3'
@@ -103,6 +107,6 @@ def test_valid_subset_does_not_claim_an_unchecked_track(case):
 
 
 def test_repair_route_is_explicitly_admin_only():
-    from downtify.auth import classify, ADMIN
+    from downtify.auth import ADMIN, classify
 
     assert classify('POST', '/api/library/album/bindings/repair') == ADMIN

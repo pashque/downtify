@@ -5,10 +5,10 @@ from __future__ import annotations
 import base64
 import json
 import math
-import subprocess
 import os
 import re
 import shutil
+import subprocess
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path

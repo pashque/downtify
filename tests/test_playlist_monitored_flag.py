@@ -1,7 +1,9 @@
 """Added-column monitor status is authoritative, not inferred from batches."""
 
 from types import SimpleNamespace
+
 import pytest
+
 from downtify import api
 
 SID = 'A' * 22
@@ -42,11 +44,13 @@ def test_batch_reports_expose_real_monitor_status(
         },
     )
     monkeypatch.setattr(api, '_library_snapshot', lambda: None)
-    report = lambda sid, name, url, **kw: {
-        'spotify_playlist_id': sid,
-        'playlist_name': name,
-        'status': 'complete',
-    }
+
+    def report(sid, name, url, **kw):
+        return {
+            'spotify_playlist_id': sid,
+            'playlist_name': name,
+            'status': 'complete',
+        }
     monkeypatch.setattr(api, '_playlist_batch_summary', report)
     monkeypatch.setattr(api, '_playlist_completeness_report', report)
     assert (

@@ -110,7 +110,9 @@ def test_api_does_not_reuse_wrong_format_destination(tmp_path, monkeypatch, comp
         SONG['song_id']: {'status': 'done' if completed else 'queued',
                          'filename': 'Artist - Song.mp3', 'user_ids': set()}})
     monkeypatch.setattr(api, '_record_finished_download', AsyncMock())
-    download = lambda *a, **kw: 'Artist - Song.flac'
+
+    def download(*a, **kw):
+        return 'Artist - Song.flac'
     monkeypatch.setattr(d, 'download', download)
     assert asyncio.run(api._run_download(dict(SONG, downtify_audio_format='flac'), SONG['song_id'])) == 'Artist - Song.flac'
 

@@ -8,7 +8,7 @@ import subprocess
 from unittest.mock import AsyncMock, MagicMock
 
 from downtify import api
-from downtify.downloader import DownloadResult, Downloader
+from downtify.downloader import Downloader, DownloadResult
 from downtify.track_index import TrackIndex
 
 SPOTIFY_ID = '4uLU6hMCjMI75M1A2tKUQC'

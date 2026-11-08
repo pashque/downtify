@@ -1,10 +1,12 @@
 """Tags show featured artists as "A, B"; the exact list rides in ARTISTS."""
 import shutil
 import subprocess
+
 import pytest
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
+
 from downtify.downloader import embed_metadata
 from downtify.library_metadata import read_audio_metadata
 

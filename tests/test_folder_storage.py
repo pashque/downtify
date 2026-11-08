@@ -1,7 +1,7 @@
 """The exact storage matrix approved by the user, without network calls."""
-from pathlib import Path
 
 import pytest
+
 from downtify.downloader import Downloader
 
 FULL = '{albumartist}/{albumartist} - {album} ({year})/{tracknumber}. {artists} - {title}.{output-ext}'

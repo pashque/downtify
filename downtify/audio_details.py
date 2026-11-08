@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from mutagen import File as MutagenFile
-from mutagen.mp3 import MP3, MPEGFrame, HeaderNotFoundError
+from mutagen.mp3 import MP3, HeaderNotFoundError, MPEGFrame
 
 from .library_metadata import audio_format
-
 
 _MODES = ('Stereo', 'Joint stereo', 'Dual channel', 'Mono')
 

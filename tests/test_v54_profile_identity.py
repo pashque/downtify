@@ -1,6 +1,10 @@
 import json
+
 import pytest
+
 from downtify import artist_profile as ap
+
+EMPTY_BIO = ''
 
 
 @pytest.mark.parametrize(('a', 'b'), [('AC/DC', 'ACDC'), ('/', '?'), ('?', '*'), ('A+B', 'AB')])
@@ -8,7 +12,7 @@ def test_profile_and_top_cache_paths_do_not_collapse(a, b, tmp_path):
     assert ap._profile_path_for(tmp_path, a) != ap._profile_path_for(tmp_path, b)
     assert ap.profile_top_songs_path_for(tmp_path, a) != ap.profile_top_songs_path_for(tmp_path, b)
     ap._save_profile(tmp_path, a, {**ap._default_profile(a), 'bio': 'one'})
-    assert ap.load_profile(tmp_path, b)['bio'] == ''
+    assert ap.load_profile(tmp_path, b)['bio'] == EMPTY_BIO
 
 
 def test_verified_legacy_profile_is_read_without_moving_art(tmp_path):
@@ -19,7 +23,7 @@ def test_verified_legacy_profile_is_read_without_moving_art(tmp_path):
     art.parent.mkdir(parents=True)
     art.write_bytes(b'custom image')
     assert ap.load_profile(tmp_path, 'AC/DC')['bio'] == 'custom'
-    assert ap.load_profile(tmp_path, 'ACDC')['bio'] == ''
+    assert ap.load_profile(tmp_path, 'ACDC')['bio'] == EMPTY_BIO
     ap._save_profile(tmp_path, 'ACDC', ap._default_profile('ACDC'))
     assert json.loads(path.read_text())['bio'] == 'custom'
     assert art.read_bytes() == b'custom image'

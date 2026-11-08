@@ -132,7 +132,6 @@ def test_truncated_after_valid_mp3_tags_is_rejected(tmp_path):
 
 
 def test_structured_collaboration_credit_requires_complete_joined_match(tmp_path):
-    from mutagen import File as MutagenFile
     from mutagen.id3 import ID3, TXXX
     target = tmp_path / 'collab.mp3'
     mp3(target, artist='Artist One')

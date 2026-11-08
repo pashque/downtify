@@ -1,7 +1,9 @@
 """Legacy recovery must prove an edition, not infer it from search ranking."""
 
 import copy
+
 import pytest
+
 from downtify import spotify
 from downtify.album_source import resolve_album_source
 from downtify.track_index import TrackIndex
@@ -274,6 +276,7 @@ def test_source_endpoint_reads_total_from_visible_file_not_cache(
     legacy, tmp_path, monkeypatch, tag_number
 ):
     from mutagen.id3 import ID3, TRCK
+
     from downtify import api, library_catalog
 
     local, source = legacy
@@ -330,6 +333,7 @@ def test_single_tag_cannot_disambiguate_equal_length_ep_family(
     legacy, tmp_path, monkeypatch
 ):
     from mutagen.id3 import ID3, TRCK, TXXX
+
     from downtify.album_source import enrich_legacy_edition
 
     local, source = legacy
@@ -407,9 +411,9 @@ def test_real_three_playlist_files_recover_full_fifteen(tmp_path, monkeypatch):
 
 
 def test_verified_copies_are_parent_scoped_and_invalidate_on_change(tmp_path):
-    from tests.test_destination_dedupe import setup_playlist, SONG
-    from downtify.track_index import resolve_existing_download
     from downtify.download_destination import destination_status
+    from downtify.track_index import resolve_existing_download
+    from tests.test_destination_dedupe import SONG, setup_playlist
 
     d, index, old = setup_playlist(tmp_path)
     legacy = old.with_name('Old credit punctuation.mp3')
@@ -532,8 +536,9 @@ def test_lookup_uses_verified_visible_identity_not_client_file_hints(
     tmp_path, monkeypatch
 ):
     import asyncio
+
     from downtify import api
-    from tests.test_destination_dedupe import setup_playlist, SONG
+    from tests.test_destination_dedupe import SONG, setup_playlist
 
     d, index, old = setup_playlist(tmp_path)
     name = 'My Playlist/' + old.name
@@ -667,7 +672,9 @@ def test_actual_library_samples_with_physical_tag_totals(
 ):
     import json
     from pathlib import Path
+
     from mutagen.id3 import ID3, TRCK
+
     from downtify import api, library_catalog
 
     sample = json.loads(

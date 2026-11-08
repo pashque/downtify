@@ -3,14 +3,17 @@
 import shutil
 import subprocess
 from pathlib import Path
+
 import pytest
+
+from downtify import source_audio_audit as mod
+from downtify.auth import ADMIN, classify
 from downtify.source_audio_audit import audit_source
 
 
 def test_raw_audit_uses_downloader_selection_and_auth_without_conversion(
     tmp_path, monkeypatch
 ):
-    from downtify import source_audio_audit as mod
 
     original = tmp_path / 'input.m4a'
     subprocess.run(
@@ -33,7 +36,8 @@ def test_raw_audit_uses_downloader_selection_and_auth_without_conversion(
     used = []
 
     class Downloader:
-        def _ydl_options(self, template, hook):
+        @staticmethod
+        def _ydl_options(template, hook):
             return {
                 'outtmpl': template,
                 'format': 'bestaudio/best',
@@ -66,14 +70,16 @@ def test_raw_audit_uses_downloader_selection_and_auth_without_conversion(
         def prepare_filename(self, info):
             return str(self.file)
 
-        def add_post_processor(self, *args, **kwargs):
+        @staticmethod
+        def add_post_processor(*args, **kwargs):
             pytest.fail('must not convert source')
 
     monkeypatch.setattr(mod.yt_dlp, 'YoutubeDL', YDL)
     result = audit_source(Downloader(), '6eD8eJeZ9F8', tmp_path / 'audit')
     assert result['codec'] == 'aac'
     assert 70 < result['measured_audio_kbps'] < 120
-    assert result['converted'] is False and result['cookies_used'] is True
+    assert result['converted'] is False
+    assert result['cookies_used'] is True
     assert used[0]['format'] == 'bestaudio/best'
     assert used[0]['cookiefile'] == 'private-cookie-file'
     assert 'private-cookie-file' not in str(result)
@@ -81,6 +87,5 @@ def test_raw_audit_uses_downloader_selection_and_auth_without_conversion(
 
 
 def test_source_audit_endpoint_is_admin_only():
-    from downtify.auth import classify, ADMIN
 
     assert classify('POST', '/api/library/source-audio-audit') == ADMIN

@@ -7,8 +7,9 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from .resource_identity import exact_name_key as key
+
 from .library_catalog import resolve_library_file
+from .resource_identity import exact_name_key as key
 
 
 def repair_bindings(ctx, index, entries, tracks, files, dry_run=True):
@@ -53,7 +54,10 @@ def repair_bindings(ctx, index, entries, tracks, files, dry_run=True):
         if len(candidates) != 1 or not re.fullmatch(r'[A-Za-z0-9]{22}', str(candidates[0].get('song_id', ''))):
             raise ValueError('No unambiguous complete track fingerprint: ' + name)
         after = path.stat()
-        stamp = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+
+        def stamp(stat_result):
+            return (stat_result.st_dev, stat_result.st_ino, stat_result.st_size,
+                    stat_result.st_mtime_ns, stat_result.st_ctime_ns)
         if stamp(before) != stamp(after):
             raise ValueError('File changed during validation')
         selected.append((candidates[0]['song_id'], name, str(path.resolve()), after.st_size, after.st_mtime_ns))

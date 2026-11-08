@@ -1,6 +1,6 @@
 """Exact provenance expansion and conservative legacy edition recovery."""
-import re
 import math
+import re
 import unicodedata
 
 

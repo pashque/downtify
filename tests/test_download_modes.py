@@ -3,9 +3,11 @@
 import asyncio
 import subprocess
 from unittest.mock import AsyncMock
+
 import pytest
-from downtify.downloader import Downloader
+
 from downtify import api
+from downtify.downloader import Downloader
 
 SONG = dict(
     song_id='5fHrHoJKfCgBd35zwIBmUK',

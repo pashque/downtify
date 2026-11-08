@@ -1,5 +1,6 @@
 """Exact fallback names when a provider-scoped resource ID is unavailable."""
 from __future__ import annotations
+
 import unicodedata
 
 

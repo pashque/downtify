@@ -2556,8 +2556,9 @@ async def library_artist_separator(request: Request) -> dict[str, Any]:
 @router.post('/api/library/artist-credits/repair')
 async def library_artist_credit_repair(request: Request) -> dict[str, Any]:
     """Admin-only explicit credit repair; dry run by default, full backups."""
-    from . import artist_credit_repair
     import hashlib
+
+    from . import artist_credit_repair
     if not request_is_admin(request):
         raise HTTPException(status_code=403, detail='Admin required')
     payload = await _json_object(request)
@@ -6631,8 +6632,8 @@ async def repair_library_album_bindings(request: Request) -> dict[str, Any]:
     source = library_album_source(request, body['artist'], body['title'], body['edition'])
     if source.get('status') != 'resolved' or source.get('edition') != body['edition']:
         raise HTTPException(status_code=400, detail='Selected release unavailable')
-    from .library_catalog import filter_library_entries
     from .album_binding_repair import repair_bindings
+    from .library_catalog import filter_library_entries
     entries = filter_library_entries(entries_for_request(request), artist=body['artist'], album=body['title'])
     try:
         return await asyncio.to_thread(repair_bindings, library_context(), state.track_index,
@@ -6668,8 +6669,8 @@ def library_album_source(request: Request, artist: str = Query(...),
                          title: str = Query(...),
                          edition: Optional[str] = Query(None)) -> dict[str, Any]:
     """Expand only an album the current account may browse, by exact provenance."""
-    from .library_catalog import filter_library_entries
     from .album_source import enrich_legacy_edition, resolve_album_source
+    from .library_catalog import filter_library_entries
     rows = filter_library_entries(entries_for_request(request), artist=artist, album=title)
     if not rows:
         raise HTTPException(status_code=404, detail='Album not found')

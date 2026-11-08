@@ -19,7 +19,6 @@ from urllib.parse import urlsplit
 import httpx
 from loguru import logger
 
-from .file_naming import file_name_key
 from .telemetry import json_log_blob, redact_sensitive_mapping
 
 SPOTIFY_URL_RE = re.compile(

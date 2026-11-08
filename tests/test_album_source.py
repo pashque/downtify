@@ -1,11 +1,12 @@
 """Only exact visible library provenance may expand a source album."""
-from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
+
 from downtify import api
 from downtify.track_index import TrackIndex
 from tests.test_download_modes import SONG
-from tests.test_library_visibility import library, _request, _admin
+from tests.test_library_visibility import _request
+from tests.test_library_visibility import library as library
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +32,7 @@ def test_source_endpoint_enforces_real_hidden_album_rules(library, monkeypatch, 
 
 
 def test_source_route_allows_authenticated_library_clients():
-    from downtify.auth import classify, CLIENT
+    from downtify.auth import CLIENT, classify
     assert classify('GET', '/api/library/album/source') == CLIENT
 
 

@@ -4,14 +4,16 @@ from downtify.album_source import _release_type, resolve_album_source
 from downtify.track_index import TrackIndex
 from tests.test_album_source_loose import _album, _local, _patch
 
+EMPTY_RELEASE_TYPE = ''
+
 
 def test_release_type_is_normalised_and_never_guessed():
     assert _release_type('EP') == 'ep'
     assert _release_type('SINGLE') == 'single'
     assert _release_type('Album') == 'album'
     assert _release_type('COMPILATION') == 'compilation'
-    assert _release_type('') == ''
-    assert _release_type('MIXTAPE?') == ''
+    assert _release_type('') == EMPTY_RELEASE_TYPE
+    assert _release_type('MIXTAPE?') == EMPTY_RELEASE_TYPE
 
 
 def test_each_found_version_carries_spotify_release_type(tmp_path, monkeypatch):
@@ -45,7 +47,8 @@ def test_unknown_type_stays_empty(tmp_path, monkeypatch):
     sources = {'D' * 22: _album('D', ['Run', 'Flow'], 'Nervous Energy 一触即发')}
     _patch(monkeypatch, [dict(id='D' * 22, name='Nervous Energy 一触即发', artists=['Mindy Meng Wang'], year='2019')], sources)
     out = resolve_album_source(_local(), 'Nervous Energy 一触即发', TrackIndex(tmp_path / 'i.db'))
-    assert out['release_type'] == '' and out['editions'][0]['release_type'] == ''
+    assert out['release_type'] == EMPTY_RELEASE_TYPE
+    assert out['editions'][0]['release_type'] == EMPTY_RELEASE_TYPE
 
 
 def test_spotify_album_link_reports_its_release_type(monkeypatch):
@@ -59,7 +62,7 @@ def test_spotify_album_link_reports_its_release_type(monkeypatch):
     assert api._spotify_details('album', 'B' * 22)['release_type'] == 'ep'
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': []})
     api._RELEASE_TYPE_CACHE.clear()
-    assert api._spotify_details('album', 'B' * 22)['release_type'] == ''
+    assert api._spotify_details('album', 'B' * 22)['release_type'] == EMPTY_RELEASE_TYPE
 
 
 def test_provider_rows_with_a_release_type_keep_it():

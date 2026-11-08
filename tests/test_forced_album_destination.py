@@ -1,7 +1,13 @@
 """Forced album requests never mutate shared storage policy."""
-from concurrent.futures import ThreadPoolExecutor
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
+
+from downtify import api
+from downtify.downloader import Downloader
+from downtify.track_index import TrackIndex, resolve_existing_download
+from tests.test_download_modes import SONG
 
 
 def _make_audio(path):
@@ -14,11 +20,6 @@ def _make_audio(path):
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return path
 
-
-from downtify.downloader import Downloader
-from downtify.track_index import TrackIndex, resolve_existing_download
-from downtify import api
-from tests.test_download_modes import SONG, FULL
 
 FORCED = dict(SONG, downtify_destination='album', downtify_download_mode='missing')
 STEM = 'Drake/Drake - Dark Lane Demo Tapes (2020)/09. Future, Drake, Young Thug - D4L'
@@ -74,7 +75,6 @@ def test_forced_album_copies_local_source_even_with_leave_in_place(tmp_path, mon
 
 
 def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, monkeypatch):
-    import threading
     from downtify import downloader as module
     d = Downloader(tmp_path, folder_structure=False, playlist_use_library=True)
     before = (d.folder_structure, d.playlist_use_library, d.output_template, d.overwrite_existing_files)
@@ -100,6 +100,7 @@ def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, m
 
 def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch):
     import threading
+
     from downtify import downloader as module
     source = tmp_path / 'source.mp3'
     _make_audio(source)
@@ -123,6 +124,7 @@ def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch
 def test_batch_endpoint_retains_album_controls(monkeypatch):
     import asyncio
     from unittest.mock import AsyncMock
+
     from tests.test_artist_top_songs_url import _FakeRequest
     monkeypatch.setattr(api.state, 'downloader', object())
     submit = AsyncMock(return_value={'count': 1})
@@ -137,6 +139,7 @@ def test_batch_endpoint_retains_album_controls(monkeypatch):
 def test_single_endpoint_retains_album_controls_for_all_sources(tmp_path, monkeypatch, source):
     import asyncio
     from unittest.mock import AsyncMock
+
     from tests.test_artist_top_songs_url import _FakeRequest
     monkeypatch.setattr(api.state, 'downloader', Downloader(tmp_path, folder_structure=False))
     monkeypatch.setattr(api.state, 'download_jobs', {})

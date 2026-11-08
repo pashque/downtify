@@ -1,9 +1,10 @@
 """Provider sequence proof is read-only and never based on local audio length."""
 
-from copy import deepcopy
 
 import pytest
 
+from downtify import recording_equivalence as module
+from downtify import spotify
 from downtify.recording_equivalence import RecordingEquivalenceRegistry
 
 A, B = 'A' * 22, 'B' * 22
@@ -92,7 +93,6 @@ def test_conflicting_refetch_revokes_old_equivalence():
 def test_warm_source_lookup_fetches_one_owned_edition_without_writes(
     monkeypatch,
 ):
-    from downtify import recording_equivalence as module, spotify
 
     registry = RecordingEquivalenceRegistry()
     monkeypatch.setattr(module, 'registry', registry)
@@ -100,7 +100,8 @@ def test_warm_source_lookup_fetches_one_owned_edition_without_writes(
     calls = []
 
     class Index:
-        def identities_for_files(self, files):
+        @staticmethod
+        def identities_for_files(files):
             assert files == {'one.mp3'}
             return {'one.mp3': {first[0]['song_id']}}
 

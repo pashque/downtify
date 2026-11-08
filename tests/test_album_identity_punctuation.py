@@ -1,6 +1,6 @@
 """Distinct album names and artists must never be merged by legacy recovery."""
-from downtify.album_source import _album_key, _loose_versions
 from downtify import spotify
+from downtify.album_source import _album_key, _loose_versions
 
 
 def test_album_identity_keeps_every_meaningful_symbol_and_version():

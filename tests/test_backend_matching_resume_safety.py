@@ -1,6 +1,8 @@
 """Offline edge cases for the resumed matching/identity lane."""
 import pytest
-from downtify import library_catalog as catalog, providers
+
+from downtify import library_catalog as catalog
+from downtify import providers
 
 
 @pytest.mark.parametrize('name', ['|', '||', '!!!'])
@@ -46,13 +48,13 @@ def test_album_matching_never_accepts_no_primary_artist(monkeypatch, artist):
 
 @pytest.mark.parametrize('artists', [[], [''], ['  ']])
 def test_official_audio_swap_without_artist_keeps_original(monkeypatch, artists):
-    monkeypatch.setattr(providers, '_ytm', lambda: type('Ytm', (), {'search': lambda *a, **kw: [{'videoId': 'wrongvideo1', 'title': 'Song', 'artists': [{'name': 'Other'}], 'videoType': 'MUSIC_VIDEO_TYPE_ATV'}]})())
+    monkeypatch.setattr(providers, '_ytm', type('Ytm', (), {'search': lambda *a, **kw: [{'videoId': 'wrongvideo1', 'title': 'Song', 'artists': [{'name': 'Other'}], 'videoType': 'MUSIC_VIDEO_TYPE_ATV'}]}))
     providers._omv_preference_cache.clear()
     assert providers._prefer_official_audio_track('original', 180, 'Song', artists, 'MUSIC_VIDEO_TYPE_OMV') == ('original', 180)
 
 
 def test_official_audio_swap_does_not_revive_negative_variant(monkeypatch):
-    monkeypatch.setattr(providers, '_ytm', lambda: type('Ytm', (), {'search': lambda *a, **kw: [{'videoId': 'wrongvideo1', 'title': 'Song (Nightcore)', 'artists': [{'name': '|||'}], 'videoType': 'MUSIC_VIDEO_TYPE_ATV'}]})())
+    monkeypatch.setattr(providers, '_ytm', type('Ytm', (), {'search': lambda *a, **kw: [{'videoId': 'wrongvideo1', 'title': 'Song (Nightcore)', 'artists': [{'name': '|||'}], 'videoType': 'MUSIC_VIDEO_TYPE_ATV'}]}))
     providers._omv_preference_cache.clear()
     assert providers._prefer_official_audio_track('original', 180, 'Song', ['|||'], 'MUSIC_VIDEO_TYPE_OMV') == ('original', 180)
 

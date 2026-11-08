@@ -1,7 +1,8 @@
 """Source position is not an album track number or a downloaded-row index."""
+import asyncio
 from types import SimpleNamespace
 
-from downtify import monitor
+from downtify import api, m3u, monitor
 from downtify.playlist_catalog import PlaylistCatalog
 
 
@@ -22,7 +23,6 @@ def test_monitor_catalog_retains_source_gaps_and_source_removals(tmp_path):
 
 
 def test_incremental_m3u_inserts_recovery_in_source_order_without_losing_members(tmp_path):
-    from downtify import m3u
     for name in ['first', 'missing', 'last', 'departed']:
         (tmp_path / (name + '.mp3')).touch()
     path, _ = m3u.write_m3u(tmp_path, 'P', [{'filename': n + '.mp3'} for n in ['last', 'first', 'departed']])
@@ -34,8 +34,6 @@ def test_incremental_m3u_inserts_recovery_in_source_order_without_losing_members
 
 
 def test_partial_spotify_batch_publishes_existing_and_recovered_files_in_source_order(tmp_path, monkeypatch):
-    import asyncio
-    from downtify import api, m3u
     folder = tmp_path / 'P'
     folder.mkdir()
     songs = [{'song_id': c * 22, 'name': c, 'artists': ['Artist']} for c in 'abcd']
@@ -73,7 +71,6 @@ def test_partial_spotify_batch_publishes_existing_and_recovered_files_in_source_
 
 
 def test_monitor_incremental_publication_uses_source_order_before_final_sync(tmp_path):
-    from downtify import m3u
     folder = tmp_path / 'P'
     folder.mkdir()
     songs = [{'song_id': c * 22, 'name': c, 'artists': ['Artist']} for c in 'abc']

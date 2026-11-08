@@ -1,5 +1,5 @@
-from downtify.downloader import Downloader
 from downtify.download_destination import matches_destination
+from downtify.downloader import Downloader
 
 
 def test_artist_safe_component_preserves_linux_valid_characters_and_literal_backslash(tmp_path):

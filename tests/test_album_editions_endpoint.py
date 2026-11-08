@@ -1,7 +1,8 @@
 """Exact-source edition discovery is read-only and available to signed-in clients."""
 import pytest
 from fastapi import HTTPException
-from downtify import api, auth, album_source
+
+from downtify import album_source, api, auth
 
 
 def test_exact_album_editions_endpoint(monkeypatch):

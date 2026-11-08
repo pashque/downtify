@@ -1,9 +1,11 @@
 """Explicit admin artist-credit repairs, without changing audio or other tags."""
 from __future__ import annotations
+
 import hashlib
 import io
 import os
 from pathlib import Path
+
 from mutagen.id3 import ID3
 
 
@@ -67,7 +69,8 @@ def source_credits(rows: list[dict], cache) -> list[dict]:
     if cache is None:
         return rows
     result = []
-    for row in rows:
+    for original_row in rows:
+        row = original_row
         if row.get('artists_structured') is True:
             result.append(row)
             continue

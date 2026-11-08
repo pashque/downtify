@@ -4,8 +4,8 @@ from unittest.mock import patch
 import pytest
 from mutagen.id3 import ID3, TALB, TIT2, TPE1, TPE2, TXXX
 
-from downtify.library_metadata import read_audio_metadata
 from downtify.library_catalog import LibraryContext, list_library_entries
+from downtify.library_metadata import read_audio_metadata
 from downtify.library_metadata_cache import LibraryMetadataCache
 
 

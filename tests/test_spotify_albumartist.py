@@ -1,5 +1,4 @@
 from downtify import spotify
-from downtify.downloader import Downloader
 
 TRACK_ID = '5fHrHoJKfCgBd35zwIBmUK'
 ALBUM_ID = '6OQ9gBfg5EXeNAEwGSs6jK'

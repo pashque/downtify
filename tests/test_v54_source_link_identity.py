@@ -1,6 +1,6 @@
 import pytest
-from fastapi import HTTPException
-from downtify import api, spotify, providers
+
+from downtify import api, providers, spotify
 
 
 @pytest.fixture(autouse=True)

@@ -131,7 +131,7 @@ def test_canonical_failure_keeps_rows_without_retrying_for_date(
     assert [row['song_id'] for row in rows] == [TRACK_ID, 'u' * 22]
     assert rows[0]['artists'] == [', '.join(NAMES)]
     assert rows[0]['artists_structured'] is False
-    assert rows[0]['release_date'] == ''
+    assert not rows[0]['release_date']
     assert rows[0]['preview_url'] == 'https://p.scdn.co/mp3-preview/test'
     assert len(calls) == 1
 

@@ -1,6 +1,7 @@
 """Known release types work even for unowned, search-unlisted editions."""
 import pytest
-from tests.test_spotify_album_credit_entities import _html, _resolve, ALBUM_ID
+
+from tests.test_spotify_album_credit_entities import ALBUM_ID, _html, _resolve
 
 
 @pytest.mark.parametrize('kind', ['ALBUM', 'SINGLE', 'EP', 'COMPILATION'])

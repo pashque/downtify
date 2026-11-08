@@ -58,7 +58,7 @@ def apply(items: list[dict[str, Any]], backup_path: Path,
         except Exception:
             pass
     backup_path.write_text(json.dumps({'created': time.time(), 'files': backup},
-                                      ensure_ascii=False, indent=1))
+                                      ensure_ascii=False, indent=1), encoding='utf-8')
     os.chmod(backup_path, 0o600)
     changed, failed = [], []
     for item in items:
@@ -89,7 +89,7 @@ def apply(items: list[dict[str, Any]], backup_path: Path,
 
 
 def restore_from_backup(backup_path: Path) -> dict[str, Any]:
-    data = json.loads(Path(backup_path).read_text())
+    data = json.loads(Path(backup_path).read_text(encoding='utf-8'))
     restored, failed = 0, []
     for row in data['files']:
         try:

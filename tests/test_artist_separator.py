@@ -3,9 +3,10 @@
 import os
 import shutil
 import subprocess
-from pathlib import Path
+
 import pytest
-from mutagen.id3 import ID3, TPE1, TIT2, APIC, TXXX
+from mutagen.id3 import APIC, ID3, TIT2, TPE1
+
 from downtify import artist_separator as sep
 
 FFMPEG = shutil.which('ffmpeg')
@@ -59,13 +60,16 @@ def test_converts_only_the_artist_and_keeps_dates_cover_and_version(
         (['Drake; 21 Savage'], 'Drake, 21 Savage')
     ]
     out = sep.apply(items, tmp_path / 'backup' / 'b.json')
-    assert out['changed'] == 1 and not out['failed']
+    assert out['changed'] == 1
+    assert not out['failed']
     tags = ID3(str(f))
     assert str(tags['TPE1']) == 'Drake, 21 Savage'
     assert list(tags['TXXX:ARTISTS'].text) == ['Drake', '21 Savage']
     assert (
         str(tags['TIT2']) == 'Song'
-        and tags.getall('APIC')[0].data == b'\xff\xd8jpegdata'
+    )
+    assert (
+        tags.getall('APIC')[0].data == b'\xff\xd8jpegdata'
     )
     assert tags.version[1] == version
     assert os.stat(f).st_mtime == 1_600_000_000
@@ -95,6 +99,9 @@ def test_id3v23_files_are_reported_not_changed(tmp_path):
     before = f.read_bytes()
     out = sep.apply(sep.plan([('a', f)]), tmp_path / 'b.json')
     assert (
-        out['changed'] == 0 and out['failed'][0]['error'] == 'ID3v2.3 skipped'
+        out['changed'] == 0
+    )
+    assert (
+        out['failed'][0]['error'] == 'ID3v2.3 skipped'
     )
     assert f.read_bytes() == before

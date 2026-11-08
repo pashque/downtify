@@ -78,9 +78,9 @@ def env(tmp_path, monkeypatch):
 def test_equivalent_provider_editions_show_actual_formats_without_rebinding(
     env, monkeypatch
 ):
-    from downtify.recording_equivalence import RecordingEquivalenceRegistry
     from downtify import recording_equivalence
-    from tests.test_recording_equivalence import sequence, A, B
+    from downtify.recording_equivalence import RecordingEquivalenceRegistry
+    from tests.test_recording_equivalence import A, B, sequence
 
     root, index, downloader = env
     first, second = sequence('a'), sequence('b')
@@ -105,7 +105,6 @@ def test_equivalent_provider_editions_show_actual_formats_without_rebinding(
 
 def test_source_id_preserves_album_and_playlist_formats(env, monkeypatch):
     root, index, downloader = env
-    from pathlib import PurePosixPath
     from mutagen.id3 import ID3, TDRC, TRCK
 
     album = (
@@ -310,7 +309,7 @@ def test_deleted_file_after_cached_snapshot_is_not_downloaded(env):
 
 
 def test_source_lookup_never_calls_provider(env, monkeypatch):
-    from downtify import spotify, deezer
+    from downtify import deezer, spotify
 
     def forbidden(*args, **kwargs):
         raise AssertionError(
@@ -325,7 +324,7 @@ def test_source_lookup_never_calls_provider(env, monkeypatch):
 
 
 def test_actual_hidden_rule_applies_to_locations(env, monkeypatch):
-    from downtify.library_visibility import LibraryVisibility, KIND_TRACK
+    from downtify.library_visibility import KIND_TRACK, LibraryVisibility
     from tests.test_library_visibility import _request
 
     root, index, downloader = env
@@ -374,11 +373,12 @@ def test_disc_number_conflict_is_not_complete_fingerprint(env):
 def test_album_only_and_shared_manual_playlists_use_same_physical_album_file(
     env,
 ):
+    from mutagen.id3 import ID3, TDRC
+
     from downtify.manual_playlists import (
         create_manual_playlist,
         edit_manual_playlist,
     )
-    from mutagen.id3 import ID3, TDRC
 
     root, index, downloader = env
     rel = (
@@ -410,7 +410,7 @@ def test_compilation_destination_uses_tagged_album_credit_but_library_route_arti
     env,
 ):
     root, index, downloader = env
-    from mutagen.id3 import ID3, TPE2, TDRC
+    from mutagen.id3 import ID3, TDRC, TPE2
 
     compilation = dict(SONG, album_artist='Various Artists')
     rel = (

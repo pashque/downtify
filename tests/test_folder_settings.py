@@ -118,7 +118,6 @@ def test_batch_only_passes_own_folder_in_separate_mode(settings_state, monkeypat
 
     async def download(song, song_id, subdir=None, **kwargs):
         seen.append(subdir)
-        return None
     monkeypatch.setattr(api, '_run_download', download)
     asyncio.run(api._process_batch([{'song_id': 'id', 'name': 'Song'}], ['job'], '', False, playlist_name='Mix'))
     assert seen == [expected_subdir]

@@ -1,8 +1,10 @@
 import hashlib
 from pathlib import Path
+
 import pytest
 from mutagen.id3 import ID3, TIT2, TPE1, TXXX
-from downtify.artist_credit_repair import prepare, apply_file, source_credits
+
+from downtify.artist_credit_repair import apply_file, prepare, source_credits
 from downtify.playlist_spotify_cache import PlaylistSpotifyCache
 
 
@@ -31,7 +33,8 @@ def test_repair_is_only_artist_list_and_preserves_file_identity(tmp_path):
         backup,
     )
     new = p.read_bytes()
-    assert len(old) == len(new) and old[tag_size:] == new[tag_size:]
+    assert len(old) == len(new)
+    assert old[tag_size:] == new[tag_size:]
     assert p.stat().st_mtime_ns == st.st_mtime_ns
     assert backup.read_bytes() == old
     tags = ID3(p)
@@ -81,7 +84,9 @@ def test_exact_cached_track_restores_missing_album_row_boundaries(tmp_path):
 
 def test_endpoint_dry_run_apply_and_admin_boundary(tmp_path, monkeypatch):
     import asyncio
+
     from fastapi import HTTPException
+
     from downtify import api
 
     p = data_file(tmp_path)
@@ -106,7 +111,7 @@ def test_endpoint_dry_run_apply_and_admin_boundary(tmp_path, monkeypatch):
         asyncio.run(api.library_artist_credit_repair(None))
     assert err.value.status_code == 403
     monkeypatch.setattr(api, 'request_is_admin', lambda request: True)
-    monkeypatch.setattr(api, 'library_context', lambda: object())
+    monkeypatch.setattr(api, 'library_context', object)
     monkeypatch.setattr(
         api,
         'resolve_library_file',
@@ -121,13 +126,19 @@ def test_endpoint_dry_run_apply_and_admin_boundary(tmp_path, monkeypatch):
     result = asyncio.run(api.library_artist_credit_repair(None))
     assert (
         result['dry_run']
-        and result['candidates'] == 1
-        and p.read_bytes() == old
+    )
+    assert (
+        result['candidates'] == 1
+    )
+    assert (
+        p.read_bytes() == old
     )
     payload['dry_run'] = False
     result = asyncio.run(api.library_artist_credit_repair(None))
     assert (
         result['changed'] == 1
-        and (Path(result['backup']) / '0.mp3').read_bytes() == old
+    )
+    assert (
+        (Path(result['backup']) / '0.mp3').read_bytes() == old
     )
     assert ID3(p)['TXXX:ARTISTS'].text == ['Tyler, The Creator']

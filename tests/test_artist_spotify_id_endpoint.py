@@ -1,6 +1,7 @@
 """Clickable link-page artists resolve to a Spotify artist id by exact name."""
 import pytest
 from fastapi import HTTPException
+
 from downtify import api, spotify
 
 

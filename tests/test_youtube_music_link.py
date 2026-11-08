@@ -1,7 +1,8 @@
 """Open on YouTube Music resolves to the real track/album page, never a search."""
 import pytest
 from fastapi import HTTPException
-from downtify import api, providers, auth
+
+from downtify import api, auth, providers, spotify
 
 
 @pytest.fixture(autouse=True)
@@ -14,7 +15,8 @@ def test_track_resolves_to_watch_page(monkeypatch):
     monkeypatch.setattr(providers, 'find_match', lambda song: seen.append(song) or ('abcDEF12345', {}))
     out = api.youtube_music_link_endpoint('track', 'Drake, 21 Savage', 'Rich Flex', 239, artists=['Drake', '21 Savage'])
     assert out == {'url': 'https://music.youtube.com/watch?v=abcDEF12345'}
-    assert seen[0]['artists'] == ['Drake', '21 Savage'] and seen[0]['duration'] == 239
+    assert seen[0]['artists'] == ['Drake', '21 Savage']
+    assert seen[0]['duration'] == 239
 
 
 def test_album_resolves_to_browse_page_with_matching_title_and_artist(monkeypatch):
@@ -41,7 +43,6 @@ def test_route_open_to_signed_in_clients():
 
 
 def test_spotify_album_link_needs_exact_title_and_lead_artist(monkeypatch):
-    from downtify import spotify
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': [
         {'id': 'R' * 22, 'name': 'Her Loss (Remix)', 'artists': ['Drake']},
         {'id': 'O' * 22, 'name': 'Her Loss', 'artists': ['Other']},
@@ -53,7 +54,6 @@ def test_spotify_album_link_needs_exact_title_and_lead_artist(monkeypatch):
 
 
 def test_spotify_track_link_opens_the_track_page_of_its_album(monkeypatch):
-    from downtify import spotify
     api._YTM_LINK_CACHE.clear()
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': [
         {'id': 'A' * 22, 'name': "Don't Be Dumb", 'artists': ['A$AP Rocky']}]})
@@ -66,7 +66,6 @@ def test_spotify_track_link_opens_the_track_page_of_its_album(monkeypatch):
 
 
 def test_spotify_track_link_without_exact_track_is_404_not_a_search(monkeypatch):
-    from downtify import spotify
     api._YTM_LINK_CACHE.clear()
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': [
         {'id': 'A' * 22, 'name': 'Album', 'artists': ['Artist']}]})

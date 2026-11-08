@@ -34,7 +34,8 @@ def test_album_found_only_via_track_query_expands(tmp_path, monkeypatch):
            if 'Flow' in q else [], {'A' * 22: full})
     title = 'Nervous Energy 一触即发'
     out = resolve_album_source(_local(), title, TrackIndex(tmp_path / 'i.db'))
-    assert out['status'] == 'resolved' and len(out['tracks']) == 4
+    assert out['status'] == 'resolved'
+    assert len(out['tracks']) == 4
     assert out['local_matches'] == {'A3' * 11: ['m/03.mp3']}
 
 
@@ -84,4 +85,5 @@ def test_downloaded_album_also_offers_other_versions(tmp_path, monkeypatch):
     out = resolve_album_source(local, 'Nervous Energy', index)
     assert [(e['id'], e['track_count']) for e in out['editions']] == [('D' * 22, 3), ('E' * 22, 2)]
     chosen = resolve_album_source(local, 'Nervous Energy', index, 'E' * 22)
-    assert chosen['edition'] == 'E' * 22 and len(chosen['tracks']) == 2
+    assert chosen['edition'] == 'E' * 22
+    assert len(chosen['tracks']) == 2

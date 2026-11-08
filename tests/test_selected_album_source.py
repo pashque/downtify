@@ -1,6 +1,12 @@
 """An opened Spotify release outranks local bindings without changing them."""
+import asyncio
+
 import pytest
-from downtify import album_source, spotify
+
+from downtify import album_source, api, spotify
+from downtify.auth import CLIENT, classify
+from downtify.track_index import TrackIndex
+from tests.test_library_visibility import _request
 
 SELECTED = '53wStBoNAK1lhbfbuCJ2zd'
 OWNED = '5ZscjYDLx3luVuDWPMkT3x'
@@ -46,7 +52,6 @@ def test_unknown_menu_selection_never_defaults_to_owned():
 
 
 def test_preference_is_persistent_user_scoped_and_literal(tmp_path):
-    from downtify.track_index import TrackIndex
     path = tmp_path / 'index.db'
     index = TrackIndex(path)
     index.set_album_preference(5, '+++', 'Album +', SELECTED)
@@ -57,10 +62,7 @@ def test_preference_is_persistent_user_scoped_and_literal(tmp_path):
 
 
 def test_source_preference_api_honors_selection_without_rebinding(source, monkeypatch, tmp_path):
-    import asyncio
-    from downtify import api
-    from downtify.track_index import TrackIndex
-    from tests.test_library_visibility import _request
+
     rows, tracks = source
     index = TrackIndex(tmp_path / 'index.db')
     index.register('O' * 22, 'owned.mp3')
@@ -71,5 +73,4 @@ def test_source_preference_api_honors_selection_without_rebinding(source, monkey
     assert result['edition'] == SELECTED
     assert api.library_album_source(_request(5), '+++', 'Album +')['edition'] == SELECTED
     assert index.spotify_id_for_filename('owned.mp3') == 'O' * 22
-    from downtify.auth import classify, CLIENT
     assert classify('POST', '/api/library/album/source') == CLIENT

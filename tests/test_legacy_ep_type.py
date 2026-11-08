@@ -2,7 +2,9 @@
 
 import json
 from pathlib import Path
+
 import pytest
+
 from downtify import spotify
 from downtify.album_source import resolve_album_source
 from downtify.track_index import TrackIndex

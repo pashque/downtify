@@ -1,5 +1,8 @@
+import asyncio
 from pathlib import Path
-from downtify import m3u
+from types import SimpleNamespace
+
+from downtify import api, m3u
 
 
 def test_playlist_publication_is_atomic(tmp_path, monkeypatch):
@@ -12,8 +15,9 @@ def test_playlist_publication_is_atomic(tmp_path, monkeypatch):
     publications = []
 
     def publish(staged, destination):
-        assert Path(destination).read_text() == before
-        assert staged != destination and 'b.mp3' in staged.read_text()
+        assert Path(destination).read_text(encoding='utf-8') == before
+        assert staged != destination
+        assert 'b.mp3' in staged.read_text()
         publications.append(destination)
         return replace(staged, destination)
     monkeypatch.setattr(Path, 'replace', publish)
@@ -58,9 +62,7 @@ def test_incremental_write_keeps_existing_repeated_source_occurrences(tmp_path):
 
 
 def test_missing_batch_preserves_large_playlist_with_real_m3u(tmp_path, monkeypatch):
-    import asyncio
-    from types import SimpleNamespace
-    from downtify import api
+
     folder = tmp_path / 'P'
     folder.mkdir()
     existing = []

@@ -1,6 +1,6 @@
 """Real-library cases that previously stayed local-only (Her Loss, EP suffixes, deluxe order)."""
-import copy
 import pytest
+
 from downtify import spotify
 from downtify.album_source import resolve_album_source
 from downtify.track_index import TrackIndex
@@ -36,7 +36,8 @@ def test_explicit_and_clean_twins_resolve_instead_of_failing(tmp_path, monkeypat
         dict(id=k, name='Her Loss', artists=['Drake', '21 Savage'], year='2022', type='ALBUM') for k in sources]})
     monkeypatch.setattr(spotify, 'album_tracks_from_id', lambda aid: sources[aid])
     out = resolve_album_source(_local('Her Loss', local_explicit), 'Her Loss', TrackIndex(tmp_path / 'i.db'))
-    assert out['status'] == 'resolved' and len(out['tracks']) == 4
+    assert out['status'] == 'resolved'
+    assert len(out['tracks']) == 4
     assert out['url'].endswith(expected * 22)
 
 
@@ -51,10 +52,12 @@ def test_all_verified_versions_listed_fullest_first_and_selectable(tmp_path, mon
         dict(id=k, name='Her Loss', artists=['Drake'], year='2022') for k in sources]})
     monkeypatch.setattr(spotify, 'album_tracks_from_id', lambda aid: sources[aid])
     out = resolve_album_source(_local('Her Loss'), 'Her Loss', TrackIndex(tmp_path / 'i.db'))
-    assert out['edition'] == 'D' * 22 and len(out['tracks']) == 5
+    assert out['edition'] == 'D' * 22
+    assert len(out['tracks']) == 5
     assert [(e['id'], e['track_count']) for e in out['editions']] == [('D' * 22, 5), ('S' * 22, 4)]
     picked = resolve_album_source(_local('Her Loss'), 'Her Loss', TrackIndex(tmp_path / 'i.db'), 'S' * 22)
-    assert picked['edition'] == 'S' * 22 and len(picked['tracks']) == 4
+    assert picked['edition'] == 'S' * 22
+    assert len(picked['tracks']) == 4
     # Explicit source selection must not silently rebind existing files.
     assert picked['local_matches'] == {}
     # An unknown edition id cannot select anything outside the verified set.
@@ -100,7 +103,8 @@ def test_suffixed_title_retries_search_without_suffix(tmp_path, monkeypatch):
     monkeypatch.setattr(spotify, 'album_tracks_from_id', lambda aid: source)
     title = 'WORSHIP FRIENDSHIP (COMPILATION)'
     out = resolve_album_source(_local(title), title, TrackIndex(tmp_path / 'i.db'))
-    assert out['status'] == 'unavailable' and queries == [f'Drake {title}', 'Drake WORSHIP FRIENDSHIP']
+    assert out['status'] == 'unavailable'
+    assert queries == [f'Drake {title}', 'Drake WORSHIP FRIENDSHIP']
 
 
 def test_one_unreadable_version_does_not_hide_the_others(tmp_path, monkeypatch):
@@ -137,7 +141,8 @@ def test_deluxe_track_found_by_unique_title_when_numbering_differs(tmp_path, mon
     monkeypatch.setattr(spotify, 'search', lambda q: {'albums': [dict(id='K' * 22, name=album, artists=['Baby Keem'], year='2022')]})
     monkeypatch.setattr(spotify, 'album_tracks_from_id', lambda aid: source)
     out = resolve_album_source(local, album, TrackIndex(tmp_path / 'i.db'))
-    assert out['status'] == 'resolved' and out['local_matches'] == {'2' * 22: ['k/01.mp3']}
+    assert out['status'] == 'resolved'
+    assert out['local_matches'] == {'2' * 22: ['k/01.mp3']}
 
 
 def test_title_fallback_requires_duration_and_uniqueness(tmp_path, monkeypatch):

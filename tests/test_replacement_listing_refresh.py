@@ -1,6 +1,6 @@
 """Replacement preserves Added, but must not preserve old listing metadata."""
-from types import SimpleNamespace
-from downtify import api, library_paths_cache as cache
+from downtify import api
+from downtify import library_paths_cache as cache
 from downtify.library_catalog import LibraryContext
 
 

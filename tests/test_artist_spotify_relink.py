@@ -32,7 +32,7 @@ def test_failed_retry_waits_a_day(tmp_path, monkeypatch):
     _profile(tmp_path, 'Mindy')
     calls = []
     monkeypatch.setattr(
-        ap, '_spotify_id_from_name', lambda name: calls.append(name)
+        ap, '_spotify_id_from_name', calls.append
     )
     monkeypatch.setattr(ap, '_spotify_id_from_tracks', lambda *a, **k: None)
     ap.ensure_profile(tmp_path, 'Mindy', [], 'en')
