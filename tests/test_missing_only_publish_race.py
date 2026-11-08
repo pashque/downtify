@@ -123,6 +123,7 @@ def test_redownload_replaces_stable_original(tmp_path, monkeypatch):
     downloader = Downloader(tmp_path, overwrite_existing_files=False)
     destination = tmp_path / 'Song.mp3'
     destination.write_bytes(b'authorized original')
+
     def acquire(video_id, staging_dir, basename, **kwargs):
         staged = Path(staging_dir) / f'{basename}.mp3'
         staged.write_bytes(b'fresh bytes')

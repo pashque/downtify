@@ -324,6 +324,8 @@ def _with_editions(ordered, edition=None, local_tracks=(), owned_ids=()):
                                explicit=any(t.get('explicit') for t in m['tracks']),
                                release_type=m.get('release_type') or m['tracks'][0].get('release_type', ''))
                           for m in ordered])
+
+
 from . import spotify
 
 

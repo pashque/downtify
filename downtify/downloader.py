@@ -50,6 +50,7 @@ class DownloadResult(str):
         value.skipped = skipped
         return value
 
+
 from . import lyrics as lyrics_mod
 from . import spotify as spotify_mod
 from .content_advisory import (

@@ -115,6 +115,7 @@ def test_batch_only_passes_own_folder_in_separate_mode(settings_state, monkeypat
     d.folder_structure, d.playlist_use_library = structured, shared
     d.organize_by_artist = d.organize_by_album = structured is None
     seen = []
+
     async def download(song, song_id, subdir=None, **kwargs):
         seen.append(subdir)
         return None

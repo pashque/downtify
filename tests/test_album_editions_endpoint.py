@@ -7,6 +7,7 @@ from downtify import api, auth, album_source
 def test_exact_album_editions_endpoint(monkeypatch):
     calls = []
     result = {'status': 'resolved', 'edition': 'A' * 22, 'editions': []}
+
     def discover(album_id):
         calls.append(album_id)
         return result

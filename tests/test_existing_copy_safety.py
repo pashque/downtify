@@ -110,6 +110,7 @@ def test_change_during_validation_is_rejected(tmp_path, monkeypatch):
     mp3(target)
     import mutagen
     original = mutagen.File
+
     def mutate(*args, **kwargs):
         audio = original(*args, **kwargs)
         target.write_bytes(target.read_bytes() + b'changed')

@@ -83,6 +83,7 @@ def test_catalog_identity_seeds_watch_before_first_download(tmp_path, monkeypatc
 
     monkeypatch.setattr(downloader, 'download', download)
     original = monitor._regenerate_m3u
+
     def regenerate(*args, **kwargs):
         result = original(*args, **kwargs)
         snapshots.append(listed(downloader))
@@ -107,6 +108,7 @@ def test_other_destination_does_not_satisfy_watch(tmp_path, monkeypatch, history
     else:
         db.mark_track_downloaded(playlist.id, A, old)
     calls = []
+
     def download(song, cb, subdir=None):
         calls.append(song['song_id'])
         put(downloader, 'Road Trip/Artist - Alpha.mp3')
@@ -160,6 +162,7 @@ def test_missing_catalog_file_is_not_proof_of_presence(tmp_path, monkeypatch):
     library.playlist_catalog.upsert_track(playlist.name, tracks[0], filename, full)
     full.unlink()
     calls = []
+
     def download(song, cb, subdir=None):
         calls.append(song['song_id'])
         put(downloader, filename)
@@ -195,6 +198,7 @@ def test_failed_missing_destination_does_not_restore_wrong_watch_copy_in_final(t
     filename = 'Road Trip/Artist - Beta.mp3'
     full = put(downloader, filename)
     library.playlist_catalog.upsert_track(playlist.name, tracks[1], filename, full)
+
     def fail(*args, **kwargs):
         raise RuntimeError('no match')
     monkeypatch.setattr(downloader, 'download', fail)
@@ -225,6 +229,7 @@ def test_monitor_marks_managed_download_missing_only_after_metadata_enrichment(t
     db, playlist, downloader, library, tracks = setup(tmp_path, monkeypatch)
     tracks[:] = tracks[:1]
     seen = []
+
     def download(song, cb, subdir=None):
         seen.append(song.get('downtify_download_mode'))
         filename = 'Road Trip/Artist - Alpha.mp3'

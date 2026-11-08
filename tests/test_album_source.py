@@ -30,7 +30,6 @@ def test_source_endpoint_enforces_real_hidden_album_rules(library, monkeypatch, 
     assert exc.value.status_code == 404
 
 
-
 def test_source_route_allows_authenticated_library_clients():
     from downtify.auth import classify, CLIENT
     assert classify('GET', '/api/library/album/source') == CLIENT

@@ -189,6 +189,7 @@ def test_api_indexed_explicit_format_copy_is_validated(tmp_path):
     with pytest.raises(RuntimeError, match='existing file'):
         api._resolve_existing_format_download(d, song, track_index=index)
 
+
 def test_api_indexed_mp3_cannot_satisfy_flac_request(tmp_path, monkeypatch):
     from unittest.mock import Mock
     d = Downloader(tmp_path, folder_structure=True, overwrite_existing_files=False)

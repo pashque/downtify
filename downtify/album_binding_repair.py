@@ -34,6 +34,7 @@ def repair_bindings(ctx, index, entries, tracks, files, dry_run=True):
         if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
             raise ValueError('File hash changed')
         credits = row.get('artists') or str(row.get('artist') or '').split(';')
+
         def matches(song):
             try:
                 durations = float(row.get('duration') or 0), float(song.get('duration') or 0)

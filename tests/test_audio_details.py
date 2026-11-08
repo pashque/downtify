@@ -9,6 +9,7 @@ def test_details_cache_is_stat_validated_and_returns_independent_results(tmp_pat
     path = generate(tmp_path / 'cached.mp3', '-c:a', 'libmp3lame')
     original = audio_details.MutagenFile
     calls = []
+
     def counted(*args, **kwargs):
         calls.append(args)
         return original(*args, **kwargs)
@@ -43,7 +44,7 @@ def test_endpoint_preserves_external_and_slskd_roots_but_rejects_escape(tmp_path
     ctx = LibraryContext(download_dir=root, slskd_dir=slskd, extra_dirs=[extra])
     monkeypatch.setattr(api, 'library_context', lambda: ctx)
     monkeypatch.setattr(api, 'allowed_entry_keys', lambda request: None)
-    request = Request({'type':'http', 'headers':[]})
+    request = Request({'type': 'http', 'headers': []})
     for folder in (extra, slskd):
         path = generate(folder / 'file.mp3', '-c:a', 'libmp3lame')
         stored = library_stored_path(path, root, slskd, [extra])
@@ -58,6 +59,7 @@ def test_endpoint_preserves_external_and_slskd_roots_but_rejects_escape(tmp_path
 
 def test_ffprobe_failure_does_not_expose_nominal_bitrate(tmp_path, monkeypatch):
     path = generate(tmp_path / 'file.ogg', '-c:a', 'libvorbis')
+
     def missing(*args, **kwargs):
         raise FileNotFoundError('ffprobe unavailable')
     monkeypatch.setattr(audio_details.subprocess, 'run', missing)
@@ -116,6 +118,7 @@ def test_audio_details_endpoint_resolves_visible_real_file_and_rechecks_access(t
             api.library_audio_details(request, bad)
         assert exc.value.status_code == 404
 
+
 import pytest
 
 
@@ -152,7 +155,6 @@ def test_mp3_other_real_modes(tmp_path, args, expected, channels):
     details = audio_details.read_audio_details(generate(tmp_path / 'file.mp3', '-c:a', 'libmp3lame', *args))
     assert details['channel_mode'] == expected
     assert details['channels'] == channels
-
 
 
 def generate(path, *args):

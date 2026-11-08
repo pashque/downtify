@@ -111,6 +111,7 @@ def test_lookup_uses_batch_source_ids_and_rejects_other_recording(monkeypatch, t
     monkeypatch.setattr(catalog, 'listing_for_request', lambda *a, **kw: entries)
     calls = []
     original = index.identities_for_files
+
     def batch(files):
         calls.append(files)
         return original(files)
@@ -193,6 +194,7 @@ def test_provider_search_song_preserves_authoritative_symbol_artist_id():
 def test_provider_never_revives_rejected_audio_variant(monkeypatch, album_name):
     row = _hit('|||')
     row['title'] = 'Same Song (Nightcore)'
+
     class FakeYtm:
         def search(self, *a, **kw):
             return [row]

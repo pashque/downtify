@@ -53,11 +53,13 @@ def test_partial_spotify_batch_publishes_existing_and_recovered_files_in_source_
     monkeypatch.setattr(api, '_organize_enabled', lambda: False)
     monkeypatch.setattr(api, 'slskd_dir_from_downloader', lambda dl: None)
     monkeypatch.setattr(api, '_fetch_playlist_for_batch', lambda *args: ('P', songs))
+
     async def noop(*args, **kwargs):
         pass
     monkeypatch.setattr(api, '_fetch_playlist_cover', noop)
     monkeypatch.setattr(api, '_finish_playlist_batch', noop)
     positions = []
+
     async def recover(song, *args, **kwargs):
         positions.append(kwargs['track_order'])
         if song['name'] == 'c':

@@ -130,5 +130,3 @@ def test_catalog_lookup_prefers_structured_credits_over_display(tmp_path):
     songs = [{'name': 'EARFQUAKE', 'artist': 'Tyler, The Creator, Frank Ocean',
               'artists': ['Tyler, The Creator', 'Frank Ocean']}]
     assert [entry['file'] for entry in lookup_library_songs(ctx, songs)] == [path.name]
-
-

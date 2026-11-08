@@ -13,6 +13,8 @@ def _make_audio(path):
         '-q:a', '9', '-y', str(path),
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return path
+
+
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download
 from downtify import api
@@ -20,6 +22,7 @@ from tests.test_download_modes import SONG, FULL
 
 FORCED = dict(SONG, downtify_destination='album', downtify_download_mode='missing')
 STEM = 'Drake/Drake - Dark Lane Demo Tapes (2020)/09. Future, Drake, Young Thug - D4L'
+
 
 @pytest.mark.parametrize('structure', [False, True, None])
 def test_forced_album_uses_canonical_structure_without_mutation(tmp_path, structure):
@@ -37,6 +40,7 @@ def test_forced_status_is_separate_from_global_playable_rows(tmp_path, monkeypat
     monkeypatch.setattr(api, 'lookup_library_songs', lambda *a, **kw: playable)
     monkeypatch.setattr(api, 'allowed_entry_keys', lambda request: None)
     monkeypatch.setattr(api, 'filter_paths_for_request', lambda paths, request: paths)
+
     class Request:
         async def json(self):
             return {'songs': [SONG], 'destination_status': True, 'destination': 'album', 'playlist_name': 'Playlist'}
@@ -77,6 +81,7 @@ def test_parallel_forced_and_playlist_contexts_keep_distinct_targets(tmp_path, m
     monkeypatch.setattr(module.spotify_mod, 'enrich_track_from_spotify_if_sparse', lambda song: song)
     monkeypatch.setattr(d, '_resolve_source', lambda *a: ('video', None, 'youtube', None))
     writes = []
+
     def fetch(song, video, progress, subdir, provider):
         target, prefix, name = d._target_location(song, subdir)
         writes.append(prefix + name)
@@ -101,6 +106,7 @@ def test_parallel_forced_local_downloads_share_target_lock(tmp_path, monkeypatch
     d = Downloader(tmp_path / 'downloads', folder_structure=False)
     barrier = threading.Barrier(2)
     monkeypatch.setattr(module.spotify_mod, 'enrich_track_from_spotify_if_sparse', lambda song: song)
+
     def resolve(*args):
         barrier.wait(timeout=5)
         return None, None, 'slskd', source

@@ -10,6 +10,7 @@ def test_playlist_publication_is_atomic(tmp_path, monkeypatch):
     before = target.read_text()
     replace = Path.replace
     publications = []
+
     def publish(staged, destination):
         assert Path(destination).read_text() == before
         assert staged != destination and 'b.mp3' in staged.read_text()
@@ -73,13 +74,14 @@ def test_missing_batch_preserves_large_playlist_with_real_m3u(tmp_path, monkeypa
     monkeypatch.setattr(api.state, 'settings', {})
     monkeypatch.setattr(api, '_organize_enabled', lambda: False)
     monkeypatch.setattr(api, 'slskd_dir_from_downloader', lambda dl: None)
+
     async def acquire(song, *args, **kwargs):
         if song['name'] == 'failed':
             return None
         (folder / 'new.mp3').touch()
         return 'P/new.mp3'
     monkeypatch.setattr(api, '_run_download', acquire)
-    asyncio.run(api._process_batch([{'name':'new'}, {'name':'failed'}], ['a','b'], '', True, playlist_name='P'))
+    asyncio.run(api._process_batch([{'name': 'new'}, {'name': 'failed'}], ['a', 'b'], '', True, playlist_name='P'))
     assert path is not None
     assert len(m3u.read_m3u_tracks(path, tmp_path)) == 805
     assert m3u.read_m3u_tracks(path, tmp_path)[:804] == [x['filename'] for x in existing]
