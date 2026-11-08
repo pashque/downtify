@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from downtify import monitor
 from downtify.monitor import LibraryStores, PlaylistMonitorDB

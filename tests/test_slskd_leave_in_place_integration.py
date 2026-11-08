@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import os
 import subprocess
-
-import pytest
 
 from downtify import api, monitor
 from downtify.downloader import Downloader

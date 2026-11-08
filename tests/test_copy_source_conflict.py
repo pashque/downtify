@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from downtify.downloader import Downloader
 from downtify.track_index import TrackIndex, resolve_existing_download

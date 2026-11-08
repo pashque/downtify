@@ -1,12 +1,10 @@
 """Real ffmpeg audio streams across supported containers; tags intentionally absent."""
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from downtify.downloader import Downloader
-
 
 # encoder, muxer, suffix; MP4/M4A and ADTS/AAC share the native AAC encoder.
 CASES = [
@@ -20,7 +18,7 @@ CASES = [
 ]
 
 
-@pytest.mark.parametrize('encoder,muxer,suffix', CASES)
+@pytest.mark.parametrize(('encoder', 'muxer', 'suffix'), CASES)
 def test_real_audio_in_supported_container_with_missing_optional_identity_tags(tmp_path, encoder, muxer, suffix):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('ffmpeg/ffprobe unavailable')

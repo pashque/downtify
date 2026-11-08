@@ -46,7 +46,7 @@ def test_resolved_url_receives_format_override(monkeypatch):
     assert api._song_from_download_request('url', {'audioFormat': 'flac'})['downtify_audio_format'] == 'flac'
 
 
-@pytest.mark.parametrize('mode,overwrite', [('missing', True), ('missing', False), ('redownload', False)])
+@pytest.mark.parametrize(('mode', 'overwrite'), [('missing', True), ('missing', False), ('redownload', False)])
 def test_override_acquires_separate_format_without_deleting_mp3(tmp_path, monkeypatch, mode, overwrite):
     d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=overwrite,
                    download_cover_art=False)
@@ -58,10 +58,13 @@ def test_override_acquires_separate_format_without_deleting_mp3(tmp_path, monkey
         def __init__(self, opts):
             assert 'downtify_audio_format' not in opts
             self.opts = self.params = opts
+
         def __enter__(self): return self
         def __exit__(self, *args): pass
+
         def add_post_processor(self, pp, **kwargs):
             calls.append(pp.mapping)
+
         def download(self, urls):
             from pathlib import Path
             Path(self.opts['outtmpl'].replace('%(ext)s', calls[-1])).write_bytes(b'new audio')
@@ -114,18 +117,19 @@ def test_api_does_not_reuse_wrong_format_destination(tmp_path, monkeypatch, comp
 
 @pytest.mark.parametrize('completed', [False, True])
 def test_api_rejects_contradictory_existing_mp3_without_acquiring_or_registering(tmp_path, monkeypatch, completed):
-    import shutil, subprocess
+    import shutil
+    import subprocess
     if not shutil.which('ffmpeg'):
         pytest.skip('ffmpeg unavailable')
     target = tmp_path / 'Artist - Song.mp3'
-    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','sine=duration=0.2','-metadata','title=Wrong Song','-metadata','artist=Artist','-y',str(target)],check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.2', '-metadata', 'title=Wrong Song', '-metadata', 'artist=Artist', '-y', str(target)], check=True)
     original = target.read_bytes()
     d = Downloader(tmp_path, folder_structure=False, overwrite_existing_files=False)
     monkeypatch.setattr(api.state, 'downloader', d)
     monkeypatch.setattr(api.state, 'loop', None)
     monkeypatch.setattr(api.state, 'track_index', None)
     monkeypatch.setattr(api.state, 'download_semaphore', None)
-    monkeypatch.setattr(api.state, 'download_jobs', {SONG['song_id']: {'status':'done' if completed else 'queued','filename':target.name,'user_ids':set()}})
+    monkeypatch.setattr(api.state, 'download_jobs', {SONG['song_id']: {'status': 'done' if completed else 'queued', 'filename': target.name, 'user_ids': set()}})
     monkeypatch.setattr(api.state.connections, 'broadcast_job', AsyncMock())
     acquired = []
     monkeypatch.setattr(d, 'download', lambda *a, **k: acquired.append(True))
@@ -144,6 +148,7 @@ def test_override_stages_away_from_existing_audio(tmp_path, monkeypatch):
     d = Downloader(tmp_path)
     original = tmp_path / 'Artist - Song.mp3'
     original.write_bytes(b'original')
+
     def opts(template, hook):
         from pathlib import Path
         assert Path(template).parent != tmp_path
@@ -159,8 +164,10 @@ def test_batch_applies_top_level_format_to_all_rows(tmp_path, monkeypatch):
     monkeypatch.setattr(api, 'log_activity', AsyncMock())
     submit = AsyncMock(return_value={'count': 1})
     monkeypatch.setattr(api, '_submit_playlist_batch', submit)
+
     class Request:
         scope = {'state': {}}
+
         async def json(self): return {'songs': [dict(SONG)], 'audioFormat': 'flac'}
     asyncio.run(api.download_batch_endpoint(Request()))
     assert submit.call_args.args[0][0]['downtify_audio_format'] == 'flac'
@@ -258,9 +265,11 @@ def test_album_endpoint_applies_audio_format(tmp_path, monkeypatch):
     monkeypatch.setattr(api, '_register_job', lambda *a, **kw: 'format-test')
     run = AsyncMock(return_value='fresh.flac')
     monkeypatch.setattr(api, '_run_download', run)
+
     class Request:
         scope = {'state': {}}
         headers = {'content-length': '22'}
+
         async def json(self): return {'audioFormat': 'flac'}
     asyncio.run(api.download_album_endpoint(Request(), 'album-url'))
     assert run.call_args.args[0]['downtify_audio_format'] == 'flac'
@@ -268,9 +277,11 @@ def test_album_endpoint_applies_audio_format(tmp_path, monkeypatch):
 
 def test_private_yt_option_is_consumed_before_ytdlp(tmp_path, monkeypatch):
     d = Downloader(tmp_path)
+
     def opts(template, hook):
         return {'outtmpl': template, 'downtify_audio_format': 'flac'}, False
     monkeypatch.setattr(d, '_ydl_options', opts)
+
     class YDL:
         def __init__(self, options):
             assert 'downtify_audio_format' not in options
@@ -316,6 +327,7 @@ def test_locked_download_preserves_exception_and_broadcasts_error(monkeypatch):
     broadcast = AsyncMock()
     monkeypatch.setattr(api.state, 'connections', type('C', (), {'broadcast_job': broadcast})())
     job = {'user_ids': set(), 'status': 'downloading'}
+
     async def fail(*args, **kwargs):
         raise error
     monkeypatch.setattr(api.state, 'download_semaphore', None)
@@ -323,6 +335,7 @@ def test_locked_download_preserves_exception_and_broadcasts_error(monkeypatch):
     monkeypatch.setattr(api, '_resolve_existing_format_download', lambda *a, **kw: None)
     monkeypatch.setattr(api, 'DOWNLOAD_EXECUTOR', None)
     # Exercise the exception boundary with a failing executor-backed download.
+
     class Loop:
         async def run_in_executor(self, *args): raise error
     with pytest.raises(RuntimeError, match='download failed'):
@@ -360,8 +373,10 @@ def test_batch_validates_formats_before_queueing(tmp_path, monkeypatch, payload)
     monkeypatch.setattr(api, 'log_activity', AsyncMock())
     submit = AsyncMock()
     monkeypatch.setattr(api, '_submit_playlist_batch', submit)
+
     class Request:
         scope = {'state': {}}
+
         async def json(self): return payload
     with pytest.raises(HTTPException) as exc:
         asyncio.run(api.download_batch_endpoint(Request()))
@@ -374,6 +389,7 @@ def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
     import json
     import shutil
     import subprocess
+
     import yt_dlp
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('ffmpeg and ffprobe required')
@@ -382,6 +398,7 @@ def test_real_ffmpeg_conversion_keeps_existing_mp3(tmp_path, monkeypatch):
                     'sine=frequency=440:duration=0.1', str(original)], check=True)
     original_bytes = original.read_bytes()
     real_ydl = yt_dlp.YoutubeDL
+
     class OfflineYDL(real_ydl):
         def download(self, urls):
             from pathlib import Path

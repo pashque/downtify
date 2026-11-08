@@ -69,7 +69,6 @@ def test_slskd_leave_in_place_does_not_mutate_or_claim_acquisition(
     tmp_path, monkeypatch, no_youtube
 ):
     import hashlib
-    import os
 
     slskd_dir, source = _slskd_file(tmp_path)
     before = (hashlib.sha256(source.read_bytes()).hexdigest(), source.stat().st_mtime_ns)
