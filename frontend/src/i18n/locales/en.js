@@ -1,8 +1,14 @@
 export default {
   labels: {
     subtitle: 'Record label · Spotify discovery',
-    limited:
-      'Only releases available on Spotify.',
+    heading: 'Labels',
+    showAll: 'Show all {count} labels',
+    matchesTitle: 'Labels matching “{query}”',
+    matchesHint:
+      'Choose the label you mean. Similar names are different labels.',
+    matchesFuzzy: 'No exact match. Did you mean one of these?',
+    matchesEmpty: 'No labels found. Check the spelling or try fewer words.',
+    limited: 'Only releases available on Spotify.',
     scanning: '{count} releases so far · checking {year}…',
     loaded: '{count} releases · exact label match, newest first',
     partial:

@@ -88,6 +88,16 @@ distributors often copy an artist name into Spotify's label field. This is a
 heuristic. Releases that are not on Spotify do not appear. Completed years are
 cached in memory for up to 30 minutes.
 
+### Finding a label
+
+Type `label:` and part of a name in the search box (for example `label:draft`)
+to see the matching labels first, then choose one to open its page. Every
+distinct Spotify label name is listed on its own, so `Draft` and `Draft LTD`,
+or `Rectangular` and `Rectangular Records`, are separate entries with example
+artists to tell them apart. If nothing matches closely, a misspelling is
+corrected with MusicBrainz suggestions that are then checked on Spotify. Put
+the name in quotes (`label:"Draft LTD"`) to open that exact label directly.
+
 ## API
 
 See [Discover](../api-reference.md#discover) in the API reference.

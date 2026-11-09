@@ -1610,6 +1610,13 @@ whose search reaches Spotify's 100-result cap returns `complete: false` with
 (`total` is the number of exact matches). Invalid labels or years return 422;
 provider failures return 502. Completed results are cached for up to 30 minutes.
 
+`GET /api/labels/find?q=draft` returns label candidates for loose text:
+`{query, labels: [{name, releases, artists, score}], fuzzy}`. Each entry is one
+exact Spotify label name (similar names are never merged); `releases` counts the
+sampled albums, `artists` are up to three examples and `fuzzy` is true when
+MusicBrainz suggestions were needed. Invalid text returns 422, provider
+failures 502. Results are cached for up to 30 minutes.
+
 `GET /api/labels/outline?label=Frucht` returns `{label, years, capped, total}`:
 the release years one plain Spotify search for the label contains, newest first.
 When `capped` is false the search was not cut off at 100 results and `years` is

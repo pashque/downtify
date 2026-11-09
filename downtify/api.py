@@ -348,6 +348,7 @@ from . import (
     deezer,
     integration_check,
     label_catalog,
+    label_find,
     label_search,
     library_catalog,
     library_import,
@@ -2791,6 +2792,20 @@ def label_releases_endpoint(
             return label_search.year_releases(label, year)
         return label_search.releases(label)
     except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get('/api/labels/find')
+def label_find_endpoint(
+    q: str = Query(..., min_length=1, max_length=200),
+    fuzzy: bool = True,
+) -> dict[str, Any]:
+    """Label candidates for loose text (typos, missing words)."""
+    try:
+        return label_find.find(q, fuzzy=fuzzy)
+    except ValueError as exc:
+        if str(exc) == 'Invalid query':
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 

@@ -53,7 +53,7 @@ full discography.
 
 Album headers show a clickable record label beside the release type and year
 when Spotify provides the exact album's label field. The label opens its
-release page. No audio files or tags are
+release page. `label:` searches list matching labels first, even misspelled. No audio files or tags are
 changed. See [Discover](docs/features/discover.md).
 
 | | |

@@ -122,6 +122,12 @@ function getVersion() {
 }
 
 // ── Search & resolve ─────────────────────────────────────────────────
+function labelFind(q, { fuzzy } = {}) {
+  return API.get('/api/labels/find', {
+    params: fuzzy === false ? { q, fuzzy: false } : { q },
+  })
+}
+
 function labelOutline(label) {
   return API.get('/api/labels/outline', { params: { label } })
 }
@@ -867,6 +873,7 @@ async function getAudioDetails(file) {
 export default {
   labelReleases,
   labelOutline,
+  labelFind,
   albumLabel,
   getAudioDetails,
   search,

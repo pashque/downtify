@@ -46,6 +46,8 @@
       </section>
     </template>
 
+    <LabelMatches v-else-if="labelQuery" :query="labelQuery" />
+
     <template v-else>
       <div class="flex flex-col gap-4">
         <PageHeader
@@ -84,6 +86,32 @@
       />
 
       <template v-else>
+        <section
+          v-if="show('labels') && labelFinder.labels.value.length"
+          class="flex flex-col gap-2"
+        >
+          <h2
+            v-if="filter === 'all'"
+            class="text-display text-xl font-semibold"
+          >
+            {{ t('labels.heading') }}
+          </h2>
+          <LabelList :items="visibleLabels" class="-mx-3" />
+          <button
+            v-if="
+              filter === 'all' &&
+              labelFinder.labels.value.length > visibleLabels.length
+            "
+            type="button"
+            class="self-start text-[13px] font-semibold text-muted hover:text-fg"
+            @click="filter = 'labels'"
+          >
+            {{
+              t('labels.showAll', { count: labelFinder.labels.value.length })
+            }}
+          </button>
+        </section>
+
         <section
           v-if="show('songs') && search.songs.value.length"
           class="flex flex-col gap-3"
@@ -128,9 +156,7 @@
           >
             {{ t('search.albums') }}
           </h2>
-          <div
-            class="tile-grid"
-          >
+          <div class="tile-grid">
             <ReleaseCard
               v-for="album in visibleAlbums"
               :key="album.album_id || album.url"
@@ -149,9 +175,7 @@
           >
             {{ t('search.artists') }}
           </h2>
-          <div
-            class="tile-grid"
-          >
+          <div class="tile-grid">
             <ReleaseCard
               v-for="artist in visibleArtists"
               :key="artist.artist_id || artist.url"
@@ -176,11 +200,15 @@ import UiChips from '/src/components/ui/UiChips.vue'
 import UiEmpty from '/src/components/ui/UiEmpty.vue'
 import UiSkeleton from '/src/components/ui/UiSkeleton.vue'
 import PageHeader from '/src/components/library/PageHeader.vue'
+import LabelList from '/src/components/search/LabelList.vue'
+import LabelMatches from '/src/components/search/LabelMatches.vue'
 import ReleaseCard from '/src/components/search/ReleaseCard.vue'
 import TrackDownPlayHeader from '/src/components/library/TrackDownPlayHeader.vue'
 import SongRow from '/src/components/search/SongRow.vue'
 import { useSearch } from '/src/model/search'
 import { useLibrary } from '/src/model/library'
+import api from '/src/model/api'
+import { labelFromQuery, useLabelFinder } from '/src/lib/labels'
 import { useI18n } from '/src/i18n'
 
 const { t } = useI18n()
@@ -197,12 +225,19 @@ watch(
 )
 
 const query = computed(() => String(route.params.query || '').trim())
+// Labels that match ordinary search text (light lookup, no spelling fixes).
+const labelFinder = useLabelFinder(
+  async (text) => (await api.labelFind(text, { fuzzy: false })).data
+)
+const labelQuery = computed(() => labelFromQuery(query.value))
 
 watch(
   query,
   (value) => {
     filter.value = 'all'
     if (!value) return
+    if (labelFromQuery(value)) return
+    if (value.length >= 3) labelFinder.load(value)
     recent.value = [
       value,
       ...recent.value.filter((term) => term !== value),
@@ -216,6 +251,15 @@ watch(
 
 const filters = computed(() => [
   { id: 'all', label: t('search.all') },
+  ...(labelFinder.labels.value.length
+    ? [
+        {
+          id: 'labels',
+          label: t('labels.heading'),
+          count: labelFinder.labels.value.length,
+        },
+      ]
+    : []),
   { id: 'songs', label: t('search.songs'), count: search.songs.value.length },
   {
     id: 'albums',
@@ -235,9 +279,17 @@ function show(section) {
 
 const hasResults = computed(
   () =>
+    labelFinder.labels.value.length ||
     search.songs.value.length ||
     search.albums.value.length ||
     search.artists.value.length
+)
+
+// In "All" only close matches are previewed; the Labels chip lists the rest.
+const visibleLabels = computed(() =>
+  filter.value === 'all'
+    ? labelFinder.labels.value.filter((item) => item.score >= 0.9).slice(0, 3)
+    : labelFinder.labels.value
 )
 
 const visibleSongs = computed(() =>

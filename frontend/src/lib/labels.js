@@ -9,6 +9,43 @@ export function labelFromQuery(query) {
   return value
 }
 
+// `label:"Draft LTD"` names one exact label; `label:draft` is a search.
+export function isExactLabelQuery(query) {
+  return /^label:\s*".+"$/i.test(String(query || '').trim())
+}
+
+// Candidates for loose text (typos, missing words). Like the release loaders,
+// an older query must never replace the newest one's results.
+export function useLabelFinder(fetchLabels) {
+  const labels = ref([])
+  const loading = ref(false)
+  const error = ref('')
+  const fuzzy = ref(false)
+  let generation = 0
+
+  async function load(query) {
+    const request = ++generation
+    labels.value = []
+    error.value = ''
+    fuzzy.value = false
+    loading.value = true
+    try {
+      const result = await fetchLabels(query)
+      if (request !== generation) return
+      labels.value = result.labels || []
+      fuzzy.value = result.fuzzy === true
+    } catch (err) {
+      if (request !== generation) return
+      error.value =
+        err?.response?.data?.detail || err?.message || 'Request failed'
+    } finally {
+      if (request === generation) loading.value = false
+    }
+  }
+
+  return { labels, loading, error, fuzzy, load }
+}
+
 // Keep request state local to the page. An earlier label must never replace
 // the current label's cards, error or loading state after navigation.
 export function useLabelReleases(fetchReleases) {

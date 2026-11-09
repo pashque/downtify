@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from downtify import api, label_search, spotify
+from downtify import api, label_find, label_search, spotify
 
 
 def test_endpoint_uses_paginated_catalog_not_suggestions(monkeypatch):
@@ -66,3 +66,41 @@ def test_outline_endpoint_reports_provider_failure(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         api.label_outline_endpoint(label='Rectangular')
     assert exc.value.status_code == 502
+
+
+def test_find_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        label_find,
+        'find',
+        lambda q, fuzzy=True: {
+            'query': q,
+            'labels': [{'name': 'Draft'}],
+            'fuzzy': False,
+        },
+    )
+    assert api.label_find_endpoint(q='draft')['labels'][0]['name'] == 'Draft'
+
+
+@pytest.mark.parametrize(
+    ('message', 'status'),
+    [('Invalid query', 422), ('Spotify label search unavailable', 502)],
+)
+def test_find_endpoint_errors(monkeypatch, message, status):
+    def fail(_, fuzzy=True):
+        raise ValueError(message)
+
+    monkeypatch.setattr(label_find, 'find', fail)
+    with pytest.raises(HTTPException) as exc:
+        api.label_find_endpoint(q='draft')
+    assert exc.value.status_code == status
+
+
+def test_find_endpoint_passes_quick_mode(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        label_find,
+        'find',
+        lambda q, fuzzy=True: seen.append(fuzzy) or {'labels': []},
+    )
+    api.label_find_endpoint(q='draft', fuzzy=False)
+    assert seen == [False]

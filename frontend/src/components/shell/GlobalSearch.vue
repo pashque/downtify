@@ -53,7 +53,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../ui/AppIcon.vue'
 import { classifyInput } from '/src/lib/input'
-import { labelFromQuery } from '/src/lib/labels'
+import { isExactLabelQuery, labelFromQuery } from '/src/lib/labels'
 import { useUi } from '/src/model/ui'
 import { useI18n } from '/src/i18n'
 
@@ -87,7 +87,17 @@ watch(
 
 function submit() {
   const label = labelFromQuery(text.value)
-  if (label) { router.push({ name: 'Label', params: { label } }); input.value?.blur(); return }
+  if (label) {
+    // A quoted name is one exact label; plain text is searched, so the
+    // person can pick among similar names and misspellings.
+    if (isExactLabelQuery(text.value)) {
+      router.push({ name: 'Label', params: { label } })
+    } else {
+      router.push({ name: 'Search', params: { query: `label:${label}` } })
+    }
+    input.value?.blur()
+    return
+  }
   const result = kind.value
   if (result.type === 'search') {
     router.push({ name: 'Search', params: { query: result.query } })
