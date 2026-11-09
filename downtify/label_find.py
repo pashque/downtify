@@ -102,15 +102,15 @@ def _sample(
     )
     albums = list(rows.values())[:limit]
 
-    def read(row: dict[str, Any]) -> tuple[dict[str, Any], str, str]:
+    def read(row: dict[str, Any]) -> tuple[dict[str, Any], str]:
         try:
             meta = label_catalog.album_metadata(row['album_id'])
         except ValueError:
-            return row, '', ''
-        return row, meta.get('label', '').strip(), meta.get('release_date', '')
+            return row, ''
+        return row, meta.get('label', '').strip()
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for row, label, released in pool.map(read, albums):
+        for row, label in pool.map(read, albums):
             if time.monotonic() > deadline or not label:
                 continue
             key = label_search.label_key(label)
@@ -120,15 +120,8 @@ def _sample(
                     'names': Counter(),
                     'artists': Counter(),
                     'n': 0,
-                    'image': '',
-                    'image_date': '',
                 },
             )
-            cover = str(row.get('cover_url') or '')
-            if cover and (
-                not entry['image'] or released > entry['image_date']
-            ):
-                entry['image'], entry['image_date'] = cover, released
             entry['names'][label] += 1
             entry['n'] += 1
             for artist in row.get('artists') or []:
@@ -153,7 +146,6 @@ def _rank(
             'name': name,
             'releases': entry['n'],
             'artists': artists[:3],
-            'image': entry['image'],
             'score': round(score, 2),
         })
     labels.sort(key=lambda x: (-x['score'], -x['releases'], x['name']))

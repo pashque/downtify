@@ -213,24 +213,6 @@ def test_quick_and_full_results_are_cached_separately(monkeypatch):
     assert calls.count('draft') == 2
 
 
-def test_label_image_is_the_cover_of_its_newest_release(monkeypatch):
-    setup(
-        monkeypatch,
-        {'draft': [(1, 'A'), (2, 'B'), (3, 'C')]},
-        {1: 'Draft', 2: 'Draft', 3: 'Draft LTD'},
-        dates={1: '2019-05-01', 2: '2024-02-02', 3: '2021-01-01'},
-    )
-    result = label_find.find('draft')
-    images = {x['name']: x['image'] for x in result['labels']}
-    assert images['Draft'].endswith('/2')
-    assert images['Draft LTD'].endswith('/3')
-
-
-def test_missing_cover_gives_an_empty_image(monkeypatch):
+def test_labels_carry_no_image(monkeypatch):
     setup(monkeypatch, {'draft': [(1, 'A')]}, {1: 'Draft'})
-    monkeypatch.setattr(
-        label_search.spotify,
-        'search_results',
-        lambda rows: {'albums': [{'id': f'{1:022d}', 'name': 'x'}]},
-    )
-    assert not label_find.find('draft')['labels'][0]['image']
+    assert 'image' not in label_find.find('draft')['labels'][0]

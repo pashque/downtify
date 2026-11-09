@@ -32,9 +32,9 @@ it('label rows are shared by the search list and the label: list', () => {
   expect(read('../components/search/LabelMatches.vue')).toContain('LabelList')
 })
 
-it('label rows show a cover thumbnail with an initials fallback', () => {
+it('label rows have no thumbnails because Spotify has no label logos', () => {
   const list = read('../components/search/LabelList.vue')
-  expect(list).toContain('CoverArt')
-  expect(list).toContain(':src="item.image || \'\'"')
-  expect(list).toContain(':name="item.name"')
+  expect(list).not.toContain('CoverArt')
+  expect(list).not.toContain('<img')
+  expect(list).not.toContain('item.image')
 })
