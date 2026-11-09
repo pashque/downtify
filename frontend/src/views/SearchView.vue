@@ -184,6 +184,20 @@
             }}
           </button>
         </section>
+
+        <section
+          v-if="filter === 'labels' && !labelFinder.labels.value.length"
+          class="flex flex-col gap-2"
+        >
+          <div v-if="labelFinder.loading.value" class="flex flex-col gap-2">
+            <div v-for="n in 3" :key="n" class="flex h-14 items-center px-3">
+              <UiSkeleton class="h-4 w-1/3" />
+            </div>
+          </div>
+          <p v-else class="px-3 text-[13px] text-muted">
+            {{ t('labels.matchesEmpty') }}
+          </p>
+        </section>
       </template>
     </template>
   </div>
@@ -262,12 +276,16 @@ const filters = computed(() => [
     label: t('search.albums'),
     count: search.albums.value.length,
   },
-  ...(labelFinder.labels.value.length
+  // Always offered so it never pops in after the others; "…" while the
+  // lookup runs.
+  ...(query.value.length >= 3
     ? [
         {
           id: 'labels',
           label: t('labels.heading'),
-          count: labelFinder.labels.value.length,
+          count: labelFinder.loading.value
+            ? '…'
+            : labelFinder.labels.value.length,
         },
       ]
     : []),

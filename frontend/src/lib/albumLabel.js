@@ -19,10 +19,12 @@ export function spotifyAlbumId(value) {
 
 export function useAlbumLabel(fetchLabel) {
   const label = ref('')
+  const loading = ref(false)
   let generation = 0
   async function load(id) {
     const current = ++generation
     label.value = ''
+    loading.value = !!id
     if (!id) return
     try {
       const data = await fetchLabel(id)
@@ -30,7 +32,9 @@ export function useAlbumLabel(fetchLabel) {
         label.value = typeof data.label === 'string' ? data.label : ''
     } catch {
       /* Optional metadata; unknown labels remain absent. */
+    } finally {
+      if (current === generation) loading.value = false
     }
   }
-  return { label, load }
+  return { label, loading, load }
 }
