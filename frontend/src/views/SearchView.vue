@@ -87,32 +87,6 @@
 
       <template v-else>
         <section
-          v-if="show('labels') && labelFinder.labels.value.length"
-          class="flex flex-col gap-2"
-        >
-          <h2
-            v-if="filter === 'all'"
-            class="text-display text-xl font-semibold"
-          >
-            {{ t('labels.heading') }}
-          </h2>
-          <LabelList :items="visibleLabels" class="-mx-3" />
-          <button
-            v-if="
-              filter === 'all' &&
-              labelFinder.labels.value.length > visibleLabels.length
-            "
-            type="button"
-            class="self-start text-[13px] font-semibold text-muted hover:text-fg"
-            @click="filter = 'labels'"
-          >
-            {{
-              t('labels.showAll', { count: labelFinder.labels.value.length })
-            }}
-          </button>
-        </section>
-
-        <section
           v-if="show('songs') && search.songs.value.length"
           class="flex flex-col gap-3"
         >
@@ -147,6 +121,26 @@
         </section>
 
         <section
+          v-if="show('artists') && search.artists.value.length"
+          class="flex flex-col gap-4"
+        >
+          <h2
+            v-if="filter === 'all'"
+            class="text-display text-xl font-semibold"
+          >
+            {{ t('search.artists') }}
+          </h2>
+          <div class="tile-grid">
+            <ReleaseCard
+              v-for="artist in visibleArtists"
+              :key="artist.artist_id || artist.url"
+              :release="artist"
+              round
+            />
+          </div>
+        </section>
+
+        <section
           v-if="show('albums') && search.albums.value.length"
           class="flex flex-col gap-4"
         >
@@ -166,23 +160,29 @@
         </section>
 
         <section
-          v-if="show('artists') && search.artists.value.length"
-          class="flex flex-col gap-4"
+          v-if="show('labels') && labelFinder.labels.value.length"
+          class="flex flex-col gap-2"
         >
           <h2
             v-if="filter === 'all'"
             class="text-display text-xl font-semibold"
           >
-            {{ t('search.artists') }}
+            {{ t('labels.heading') }}
           </h2>
-          <div class="tile-grid">
-            <ReleaseCard
-              v-for="artist in visibleArtists"
-              :key="artist.artist_id || artist.url"
-              :release="artist"
-              round
-            />
-          </div>
+          <LabelList :items="visibleLabels" class="-mx-3" />
+          <button
+            v-if="
+              filter === 'all' &&
+              labelFinder.labels.value.length > visibleLabels.length
+            "
+            type="button"
+            class="self-start text-[13px] font-semibold text-muted hover:text-fg"
+            @click="filter = 'labels'"
+          >
+            {{
+              t('labels.showAll', { count: labelFinder.labels.value.length })
+            }}
+          </button>
         </section>
       </template>
     </template>
@@ -251,6 +251,17 @@ watch(
 
 const filters = computed(() => [
   { id: 'all', label: t('search.all') },
+  { id: 'songs', label: t('search.songs'), count: search.songs.value.length },
+  {
+    id: 'artists',
+    label: t('search.artists'),
+    count: search.artists.value.length,
+  },
+  {
+    id: 'albums',
+    label: t('search.albums'),
+    count: search.albums.value.length,
+  },
   ...(labelFinder.labels.value.length
     ? [
         {
@@ -260,17 +271,6 @@ const filters = computed(() => [
         },
       ]
     : []),
-  { id: 'songs', label: t('search.songs'), count: search.songs.value.length },
-  {
-    id: 'albums',
-    label: t('search.albums'),
-    count: search.albums.value.length,
-  },
-  {
-    id: 'artists',
-    label: t('search.artists'),
-    count: search.artists.value.length,
-  },
 ])
 
 function show(section) {
