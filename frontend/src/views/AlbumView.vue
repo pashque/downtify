@@ -14,7 +14,7 @@
         :cover="album.cover"
         :name="album.title"
       >
-        <template #kicker><AlbumLabelKicker :text="[releaseKicker(effectiveType, t), album.year].filter(Boolean).join(' · ')" :album-id="spotifyAlbumId(edition || sourceSongs?.[0]?.album_id)" :pending="sourceLoading" /></template>
+        <template #kicker><AlbumLabelKicker :text="[releaseKicker(effectiveType, t), album.year].filter(Boolean).join(' · ')" :album-id="spotifyAlbumId(edition || sourceSongs?.[0]?.album_id)" :pending="sourceLoading" :cache-key="`lib:${route.query.artist || ''}|${route.query.title || ''}`" /></template>
         <template #subtitle>
           <RouterLink
             v-if="album.artist"

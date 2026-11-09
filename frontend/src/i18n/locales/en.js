@@ -1,6 +1,7 @@
 export default {
   labels: {
     subtitle: 'Record label · Spotify discovery',
+    kickerPending: 'Label',
     heading: 'Labels',
     showAll: 'Show all {count} labels',
     matchesTitle: 'Labels matching “{query}”',

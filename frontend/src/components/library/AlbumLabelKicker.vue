@@ -11,27 +11,29 @@
       ></template
     ><template v-else-if="pending || state.loading.value">
       ·
-      <span
-        class="inline-block h-[0.8em] w-16 animate-pulse rounded-sm bg-current align-middle opacity-15"
-        aria-hidden="true"
-        data-label-pending
-      ></span></template
-  ></span>
+      <span data-label-pending>{{ t('labels.kickerPending') }}</span></template
+    ></span
+  >
 </template>
 <script setup>
 import { watch } from 'vue'
 import api from '/src/model/api'
 import { useAlbumLabel } from '/src/lib/albumLabel'
+import { useI18n } from '/src/i18n'
 const props = defineProps({
   text: { type: String, default: '' },
   albumId: { type: String, default: '' },
   // The album's exact Spotify edition is still being resolved.
   pending: { type: Boolean, default: false },
+  // Names the library album, so its label is remembered before the exact
+  // Spotify edition is resolved.
+  cacheKey: { type: String, default: '' },
 })
+const { t } = useI18n()
 const state = useAlbumLabel(async (id) => (await api.albumLabel(id)).data)
 watch(
-  () => props.albumId,
-  (id) => state.load(id),
+  () => [props.albumId, props.cacheKey],
+  ([id, key]) => state.load(id, key),
   { immediate: true }
 )
 </script>

@@ -57,11 +57,13 @@ describe('album label loading state', () => {
 })
 
 describe('label slot is reserved so nothing pops in late', () => {
-  it('the kicker shows a placeholder while the label is pending', () => {
+  it('the kicker shows the word Label while the label is pending', () => {
     const kicker = read('../components/library/AlbumLabelKicker.vue')
     expect(kicker).toContain('data-label-pending')
-    expect(kicker).toContain('pending')
+    expect(kicker).toContain("t('labels.kickerPending')")
     expect(kicker).toContain('state.loading.value')
+    expect(kicker).not.toContain('animate-pulse')
+    expect(read('../i18n/locales/en.js')).toContain("kickerPending: 'Label'")
   })
 
   it('the album page keeps the slot while the edition is being resolved', () => {
