@@ -37,7 +37,9 @@ def test_endpoint_loads_one_year(monkeypatch):
         'year_releases',
         lambda label, year: {'label': label, 'year': year, 'releases': []},
     )
-    assert api.label_releases_endpoint(label='Frucht', year=2020)['year'] == 2020
+    assert (
+        api.label_releases_endpoint(label='Frucht', year=2020)['year'] == 2020
+    )
 
 
 @pytest.mark.parametrize('year', [1800, 3000])
@@ -45,3 +47,22 @@ def test_endpoint_rejects_invalid_year(year):
     with pytest.raises(HTTPException) as exc:
         api.label_releases_endpoint(label='Frucht', year=year)
     assert exc.value.status_code == 422
+
+
+def test_outline_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        label_search,
+        'outline',
+        lambda label: {'label': label, 'years': [2024], 'capped': False},
+    )
+    assert api.label_outline_endpoint(label='Rectangular')['years'] == [2024]
+
+
+def test_outline_endpoint_reports_provider_failure(monkeypatch):
+    def fail(_):
+        raise ValueError('Spotify unavailable')
+
+    monkeypatch.setattr(label_search, 'outline', fail)
+    with pytest.raises(HTTPException) as exc:
+        api.label_outline_endpoint(label='Rectangular')
+    assert exc.value.status_code == 502

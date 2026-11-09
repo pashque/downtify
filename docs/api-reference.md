@@ -1610,6 +1610,11 @@ whose search reaches Spotify's 100-result cap returns `complete: false` with
 (`total` is the number of exact matches). Invalid labels or years return 422;
 provider failures return 502. Completed results are cached for up to 30 minutes.
 
+`GET /api/labels/outline?label=Frucht` returns `{label, years, capped, total}`:
+the release years one plain Spotify search for the label contains, newest first.
+When `capped` is false the search was not cut off at 100 results and `years` is
+exact, so a client can load only those years. When true it is only a sample.
+
 Suggested artists, counted listens and hidden artists — see [Discover](features/discover.md).
 
 ### `POST /api/discover`

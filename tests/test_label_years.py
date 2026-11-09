@@ -103,7 +103,7 @@ def test_year_with_capped_results_is_not_called_complete(monkeypatch):
     def fetch(name, offset, token, timeout, years=None):
         items = [named(i, 'A') for i in range(100)]
         return {
-            'items': items[offset:offset + 50],
+            'items': items[offset : offset + 50],
             'totalCount': 100,
             'pagingInfo': {'nextOffset': offset + 50 if offset == 0 else None},
         }

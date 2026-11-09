@@ -2,7 +2,7 @@ export default {
   labels: {
     subtitle: 'Record label · Spotify discovery',
     limited:
-      'Only releases whose Spotify label is exactly this label, newest first. Releases Spotify does not list may be missing. Open a release to play or download its tracks.',
+      'Only releases available on Spotify.',
     scanning: '{count} releases so far · checking {year}…',
     loaded: '{count} releases · exact label match, newest first',
     partial:

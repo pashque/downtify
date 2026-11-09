@@ -154,7 +154,7 @@ def _verify_labels(
             if time.monotonic() >= deadline:
                 unverified += len(candidates) - start
                 break
-            batch = candidates[start:start + 8]
+            batch = candidates[start : start + 8]
             futures = [
                 pool.submit(label_catalog.album_metadata, row['album_id'])
                 for row in batch
@@ -261,7 +261,11 @@ def _catalog_snapshot(name: str, half_hour: int) -> dict[str, Any]:
     if complete and total is not None and total >= _SEARCH_CAP:
         found = {}
         total, complete, reason = _split_years(
-            name, _FIRST_YEAR, time.gmtime().tm_year + 1, token, deadline,
+            name,
+            _FIRST_YEAR,
+            time.gmtime().tm_year + 1,
+            token,
+            deadline,
             found,
         )
     return _finish(name, found, total, complete, reason)
@@ -303,8 +307,7 @@ def _finish(
         'partial_reason': reason,
         'scope': 'exact_spotify_label',
         'notice': (
-            'Exact album-label matches only; Spotify search can omit '
-            'releases.'
+            'Exact album-label matches only; Spotify search can omit releases.'
         ),
     }
     if not complete:
@@ -316,8 +319,7 @@ def _own_name(row: dict[str, Any], name: str) -> bool:
     """True when every credited artist is named exactly like the label."""
     artists = row.get('artists') or []
     return bool(artists) and all(
-        isinstance(a, str) and label_key(a) == label_key(name)
-        for a in artists
+        isinstance(a, str) and label_key(a) == label_key(name) for a in artists
     )
 
 
@@ -342,9 +344,7 @@ def _roster_label(name: str, half_hour: int) -> bool:
     found, _total, _done, _reason = _crawl(
         name, None, token, time.monotonic() + 20
     )
-    others = [
-        row for row in found.values() if not _own_name(row, name)
-    ][:25]
+    others = [row for row in found.values() if not _own_name(row, name)][:25]
     for row in others:
         try:
             meta = label_catalog.album_metadata(row['album_id'])
@@ -421,3 +421,35 @@ def year_releases(label: str, year: Any) -> dict[str, Any]:
     except _PartialCatalog as exc:
         result = exc.data
     return copy.deepcopy(result)
+
+
+@lru_cache(maxsize=128)
+def _outline_snapshot(name: str, half_hour: int) -> dict[str, Any]:
+    token = spotify._anonymous_token()
+    if not token:
+        raise ValueError('Spotify label search unavailable')
+    found, total, done, reason = _crawl(
+        name, None, token, time.monotonic() + _BUDGET_SECONDS
+    )
+    if not done and not found:
+        raise ValueError(f'Spotify label search unavailable: {reason}')
+    years = sorted(
+        {
+            int(row['year'])
+            for row in found.values()
+            if str(row.get('year')).isdigit()
+        },
+        reverse=True,
+    )
+    return {
+        'label': name,
+        'years': years,
+        'capped': total is None or total >= _SEARCH_CAP or not done,
+        'total': total,
+    }
+
+
+def outline(label: str) -> dict[str, Any]:
+    """Years seen by one plain search: exact when uncapped, a sample if not."""
+    name = _clean_label(label)
+    return copy.deepcopy(_outline_snapshot(name, int(time.time() // 1800)))

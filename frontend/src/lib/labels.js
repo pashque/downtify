@@ -95,16 +95,38 @@ export function useLabelTimeline(fetchYear, options = {}) {
     year.value = null
     loading.value = true
     scanning.value = true
+    let outline = null
+    if (options.fetchOutline) {
+      try {
+        outline = await options.fetchOutline(label)
+      } catch {
+        outline = null
+      }
+      if (request !== generation) return
+    }
+    const known = (outline?.years || []).filter(
+      (y) => Number.isInteger(y) && y >= FIRST_YEAR
+    )
+    // An uncapped search lists every release of the label, so its years are
+    // exact: visit only those, however far apart they are.
+    const exact = outline && outline.capped === false
+    const oldestSeen = known.length ? Math.min(...known) : null
     let found = false
     let empty = 0
-    for (let current = latest(); current >= FIRST_YEAR; current--) {
+    const queue = exact
+      ? [...known].sort((a, b) => b - a)
+      : Array.from(
+          { length: latest() - FIRST_YEAR + 1 },
+          (_, i) => latest() - i
+        )
+    for (const current of queue) {
       year.value = current
       let result
       try {
         result = await fetchYear(label, current)
       } catch (err) {
         if (request !== generation) return
-        if (!found && current === latest() && !releases.value.length) {
+        if (!found && current === queue[0] && !releases.value.length) {
           error.value =
             err?.response?.data?.detail || err?.message || 'Request failed'
           break
@@ -124,9 +146,11 @@ export function useLabelTimeline(fetchYear, options = {}) {
         found = true
         empty = 0
         loading.value = false
-      } else if (found) {
+      } else if (found && !exact) {
         empty += 1
-        if (empty >= STOP_AFTER_EMPTY) break
+        // Never stop above the oldest year the label's own search showed.
+        const reached = oldestSeen === null || current <= oldestSeen
+        if (empty >= STOP_AFTER_EMPTY && reached) break
       }
     }
     if (request !== generation) return

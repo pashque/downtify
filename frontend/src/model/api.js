@@ -122,6 +122,10 @@ function getVersion() {
 }
 
 // ── Search & resolve ─────────────────────────────────────────────────
+function labelOutline(label) {
+  return API.get('/api/labels/outline', { params: { label } })
+}
+
 function albumLabel(album_id) {
   return API.get('/api/labels/album', { params: { album_id } })
 }
@@ -149,11 +153,17 @@ function getSpotifyAlbumEditions(album_id) {
 }
 
 function spotifyLink(params) {
-  return API.get('/api/spotify/link', { params, paramsSerializer: { indexes: null } })
+  return API.get('/api/spotify/link', {
+    params,
+    paramsSerializer: { indexes: null },
+  })
 }
 
 function youtubeMusicLink(params) {
-  return API.get('/api/youtube_music/link', { params, paramsSerializer: { indexes: null } })
+  return API.get('/api/youtube_music/link', {
+    params,
+    paramsSerializer: { indexes: null },
+  })
 }
 
 function getArtistSpotifyId(name) {
@@ -848,12 +858,15 @@ function setSettings(settings) {
 }
 
 async function getAudioDetails(file) {
-  const { data } = await API.get('/api/library/audio-details', { params: { file } })
+  const { data } = await API.get('/api/library/audio-details', {
+    params: { file },
+  })
   return data
 }
 
 export default {
   labelReleases,
+  labelOutline,
   albumLabel,
   getAudioDetails,
   search,

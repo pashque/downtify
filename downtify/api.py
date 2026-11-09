@@ -2794,6 +2794,19 @@ def label_releases_endpoint(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get('/api/labels/outline')
+def label_outline_endpoint(
+    label: str = Query(..., min_length=1, max_length=200),
+) -> dict[str, Any]:
+    """Release years one plain search saw; lets the page skip empty gaps."""
+    if not label.strip() or any(ord(c) < 32 or c in '\\\"' for c in label):
+        raise HTTPException(status_code=422, detail='Invalid label name')
+    try:
+        return label_search.outline(label)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @router.get('/api/labels/album')
 def album_label_endpoint(
     album_id: str = Query(..., pattern=r'^[A-Za-z0-9]{22}$'),

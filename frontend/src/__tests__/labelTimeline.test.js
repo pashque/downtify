@@ -56,7 +56,11 @@ describe('label timeline', () => {
     const state = useLabelTimeline(
       (label, year) =>
         year === 2024
-          ? Promise.resolve({ year, releases: [release('new')], complete: true })
+          ? Promise.resolve({
+              year,
+              releases: [release('new')],
+              complete: true,
+            })
           : new Promise((resolve) => {
               release2023 = () =>
                 resolve({ year, releases: [], complete: true })
@@ -125,5 +129,62 @@ describe('label timeline', () => {
     state.stop()
     await pending
     expect(seen[0]).toBe(new Date().getFullYear())
+  })
+
+  it('visits only the outline years of an uncapped label, across gaps', async () => {
+    const seen = []
+    const state = useLabelTimeline(
+      async (label, year) => {
+        seen.push(year)
+        return years({ 2024: ['a'], 2015: ['b'] })(label, year)
+      },
+      {
+        latestYear: 2026,
+        fetchOutline: async () => ({
+          years: [2024, 2015],
+          capped: false,
+        }),
+      }
+    )
+    await state.load('Rectangular')
+    expect(seen).toEqual([2024, 2015])
+    expect(state.releases.value.map((r) => r.album_id)).toEqual(['a', 'b'])
+    expect(state.complete.value).toBe(true)
+  })
+
+  it('does not stop a capped label before the oldest sampled year', async () => {
+    const seen = []
+    const state = useLabelTimeline(
+      async (label, year) => {
+        seen.push(year)
+        return years({ 2024: ['a'], 2012: ['z'] })(label, year)
+      },
+      {
+        latestYear: 2024,
+        fetchOutline: async () => ({ years: [2024, 2012], capped: true }),
+      }
+    )
+    await state.load('Big')
+    expect(seen).toContain(2012)
+    expect(seen.at(-1)).toBe(2007)
+    expect(state.releases.value.map((r) => r.album_id)).toEqual(['a', 'z'])
+  })
+
+  it('falls back to the plain scan when the outline fails', async () => {
+    const seen = []
+    const state = useLabelTimeline(
+      async (label, year) => {
+        seen.push(year)
+        return years({ 2024: ['a'] })(label, year)
+      },
+      {
+        latestYear: 2024,
+        fetchOutline: async () => {
+          throw new Error('nope')
+        },
+      }
+    )
+    await state.load('Big')
+    expect(seen).toEqual([2024, 2023, 2022, 2021, 2020, 2019])
   })
 })

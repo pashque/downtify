@@ -94,7 +94,8 @@ const { t } = useI18n()
 const route = useRoute()
 const label = computed(() => String(route.params.label || '').trim())
 const state = useLabelTimeline(
-  async (name, year) => (await api.labelReleases(name, year)).data
+  async (name, year) => (await api.labelReleases(name, year)).data,
+  { fetchOutline: async (name) => (await api.labelOutline(name)).data }
 )
 watch(label, (name) => state.load(name), { immediate: true })
 onBeforeUnmount(() => state.stop())
