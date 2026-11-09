@@ -1017,6 +1017,7 @@ RULES: list[tuple[frozenset[str], re.Pattern[str], str]] = [
         (_READ, r'^/(downloads|media)/', CLIENT),
         (_READ, r'^/api/(songs|albums|artists)/search$', CLIENT),
         (_READ, r'^/api/discover/chart$', CLIENT),
+        (_READ, r'^/api/labels/(releases|album)$', CLIENT),
         (_READ, r'^/api/finder/', CLIENT),
         (_READ, r'^/api/similar/', CLIENT),
         (_READ, r'^/api/artists/', CLIENT),

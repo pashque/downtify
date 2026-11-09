@@ -49,6 +49,7 @@
         "
         :round="details.kind === 'artist'"
       >
+        <template #kicker><AlbumLabelKicker :text="kicker" :album-id="details?.kind === 'album' ? spotifyAlbumId(url) : ''" /></template>
         <template #subtitle>
           <!-- Exactly the library album page's lines, for every source:
                "Artist · 16 tracks · 1 h 1 min" (kicker "ALBUM · 2022"). -->
@@ -291,6 +292,8 @@ import { rowPlaybackClick } from '/src/lib/rowPlayback'
 import { useSongStarter } from '/src/model/songPlay'
 import ArtistCredits from '/src/components/library/ArtistCredits.vue'
 import LocalLike from '/src/components/library/LocalLike.vue'
+import AlbumLabelKicker from '/src/components/library/AlbumLabelKicker.vue'
+import { spotifyAlbumId } from '/src/lib/albumLabel'
 import { computed, ref, watch as watchValue } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '/src/components/ui/AppIcon.vue'

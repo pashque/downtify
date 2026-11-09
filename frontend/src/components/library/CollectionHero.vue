@@ -103,7 +103,7 @@
         <span
           class="eyebrow"
           :class="banner ? '!text-white/70' : '!text-fg-3'"
-          >{{ kicker }}</span
+          ><slot name="kicker">{{ kicker }}</slot></span
         >
         <h1
           class="text-display line-clamp-2 text-4xl leading-[1.05] font-bold text-balance break-words max-lg:text-[26px] lg:text-5xl xl:text-[64px]"

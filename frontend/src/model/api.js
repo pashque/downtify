@@ -122,6 +122,16 @@ function getVersion() {
 }
 
 // ── Search & resolve ─────────────────────────────────────────────────
+function albumLabel(album_id) {
+  return API.get('/api/labels/album', { params: { album_id } })
+}
+
+function labelReleases(label, year) {
+  return API.get('/api/labels/releases', {
+    params: year === undefined ? { label } : { label, year },
+  })
+}
+
 function search(query) {
   return API.get('/api/songs/search', { params: { query } })
 }
@@ -843,6 +853,8 @@ async function getAudioDetails(file) {
 }
 
 export default {
+  labelReleases,
+  albumLabel,
   getAudioDetails,
   search,
   searchAlbums,

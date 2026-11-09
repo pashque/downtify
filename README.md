@@ -46,6 +46,16 @@ All of it runs inside a single Docker container. See **[How it works](https://he
 
 ## Features
 
+Label release pages list only releases whose Spotify label is exactly the
+label you opened, newest first. They load one release year at a time, starting
+with the present year. Spotify can omit releases, so this is not a guaranteed
+full discography.
+
+Album headers show a clickable record label beside the release type and year
+when Spotify provides the exact album's label field. The label opens its
+release page. No audio files or tags are
+changed. See [Discover](docs/features/discover.md).
+
 | | |
 |---|---|
 | **Download** | Spotify tracks, albums, playlists and artists (their releases and top songs); YouTube Music songs, albums, playlists and artists; free-text search; CSV imports from Soundiiz, TuneMyMusic and Exportify. MP3, FLAC, M4A, OGG or OPUS at the bitrate you pick. See [Download settings](https://henriquesebastiao.github.io/downtify/features/download-settings/) and [Library import](https://henriquesebastiao.github.io/downtify/features/library-import/). |

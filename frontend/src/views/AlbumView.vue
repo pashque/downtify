@@ -14,6 +14,7 @@
         :cover="album.cover"
         :name="album.title"
       >
+        <template #kicker><AlbumLabelKicker :text="[releaseKicker(effectiveType, t), album.year].filter(Boolean).join(' · ')" :album-id="spotifyAlbumId(edition || sourceSongs?.[0]?.album_id)" /></template>
         <template #subtitle>
           <RouterLink
             v-if="album.artist"
@@ -149,6 +150,8 @@
 </template>
 
 <script setup>
+import AlbumLabelKicker from '/src/components/library/AlbumLabelKicker.vue'
+import { spotifyAlbumId } from '/src/lib/albumLabel'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import UiButton from '/src/components/ui/UiButton.vue'

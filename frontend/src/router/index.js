@@ -6,6 +6,7 @@ const LIBRARY_TABS = 'tracks|albums|artists|playlists'
 const CHARTS_TABS = 'tracks|albums|artists|playlists'
 
 const routes = [
+  { path: '/label/:label', name: 'Label', component: () => import('/src/views/LabelView.vue') },
   { path: '/', name: 'Home', component: HomeView },
   {
     path: '/search/:query?',

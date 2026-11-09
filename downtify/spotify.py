@@ -1945,6 +1945,10 @@ def _search_suggestion_items(text: str) -> list[Any]:
         )
         resp.raise_for_status()
         data = resp.json()
+        search_data = (data.get('data') or {}).get('searchV2')
+        top = (search_data or {}).get('topResultsV2')
+        if data.get('errors') or not isinstance(top, dict) or not isinstance(top.get('itemsV2'), list):
+            raise ValueError('Invalid Spotify search response')
     except Exception as exc:
         logger.opt(exception=True).debug(
             'Spotify search failed for {!r}', text
@@ -2073,6 +2077,46 @@ def search(text: str) -> dict[str, list[dict[str, Any]]]:
     Spotify didn't answer."""
 
     return search_results(_search_suggestion_items(text.strip()))
+
+
+def label_releases(label: str) -> dict[str, Any]:
+    """A bounded selection from Spotify's label-filtered suggestions.
+
+    This is discovery, not a verified label registry or full discography.
+    Keep the limitation even for zero results: ranking, market restrictions
+    and provider caps all prevent a claim of catalog completeness.
+    """
+    name = label.strip()
+    if (
+        not name
+        or len(name) > 200
+        or any(ord(char) < 32 or char in '\\"' for char in name)
+    ):
+        raise ValueError('Invalid label name')
+    albums = search(f'label:"{name}"')['albums']
+    releases = []
+    seen = set()
+    for album in albums:
+        album_id = str(album.get('id') or '')
+        if not re.fullmatch(r'[A-Za-z0-9]{22}', album_id) or album_id in seen:
+            continue
+        seen.add(album_id)
+        releases.append({
+            **album,
+            'album_id': album_id,
+            'url': f'https://open.spotify.com/album/{album_id}',
+            'source': 'spotify',
+        })
+    releases.sort(key=lambda row: str(row.get('year') or ''), reverse=True)
+    return {
+        'label': name,
+        'releases': releases,
+        'complete': False,
+        'notice': (
+            'Spotify label search returns a limited selection, '
+            'not a complete catalog.'
+        ),
+    }
 
 
 def primary_artist_id_from_track_id(track_id: str) -> Optional[str]:

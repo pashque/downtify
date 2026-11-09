@@ -66,6 +66,28 @@ The same list shows every hidden artist, with **Show again** to take one back. N
 - **An artist Deezer doesn't know** simply adds nothing; it isn't searched for again until its week is up.
 - Only artist and album *names* ever leave your server (as Deezer and Spotify searches). Nothing about what you play is sent anywhere.
 
+Album and Spotify Link headers show **Album · Year · Label**: the label name
+is a link, without brackets or parentheses. Unknown labels and their separator
+are omitted. Metadata comes from Spotify's exact-album `label` field, never
+inferred from copyright text or an artist name. Successful metadata is cached
+in memory for up to an hour; unavailable metadata does not block the album.
+
+Label pages list only releases whose Spotify label equals the label you
+opened, newest first by release date. Case, spacing and the marks ®, ™, © and ℗
+are ignored; similar names such as `Frucht` and `Fruchtfleisch LTD` are never
+merged. Spotify has no label ID, so every album's own `label` field is checked.
+
+Spotify caps one search at 100 results, so the page loads one release year at a
+time, starting with the present year, and shows each year as it arrives. After
+the first year with releases it stops once five years in a row are empty. A year
+that cannot be checked is listed as such, and Try again reloads the page.
+
+An artist named exactly like the label is left out when the label also has
+other artists and the title does not contain the label's name, because
+distributors often copy an artist name into Spotify's label field. This is a
+heuristic. Releases that are not on Spotify do not appear. Completed years are
+cached in memory for up to 30 minutes.
+
 ## API
 
 See [Discover](../api-reference.md#discover) in the API reference.

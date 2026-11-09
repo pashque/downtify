@@ -347,6 +347,8 @@ from . import (
     cover_sources,
     deezer,
     integration_check,
+    label_catalog,
+    label_search,
     library_catalog,
     library_import,
     library_upgrade,
@@ -2772,6 +2774,37 @@ def spotify_link_endpoint(
         raise HTTPException(status_code=404, detail='Not found on Spotify')
     _YTM_LINK_CACHE[key] = url
     return {'url': url}
+
+
+@router.get('/api/labels/releases')
+def label_releases_endpoint(
+    label: str = Query(..., min_length=1, max_length=200),
+    year: Optional[int] = None,
+) -> dict[str, Any]:
+    """Exact-label releases; ``year`` loads a single release year."""
+    if not label.strip() or any(ord(c) < 32 or c in '\\"' for c in label):
+        raise HTTPException(status_code=422, detail='Invalid label name')
+    if year is not None and not 1950 <= year <= 2200:
+        raise HTTPException(status_code=422, detail='Invalid year')
+    try:
+        if year is not None:
+            return label_search.year_releases(label, year)
+        return label_search.releases(label)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get('/api/labels/album')
+def album_label_endpoint(
+    album_id: str = Query(..., pattern=r'^[A-Za-z0-9]{22}$'),
+) -> dict[str, Any]:
+    """Optional label of the exact requested Spotify album."""
+    if state.settings.get('library_only') is True:
+        raise HTTPException(status_code=409, detail='Library-only mode is enabled')
+    try:
+        return {'album_id': album_id, 'label': label_catalog.album_label(album_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get('/api/discover/chart')

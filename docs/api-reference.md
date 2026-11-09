@@ -1596,6 +1596,20 @@ Unlike everything of one's own (everything for an admin), which also removes the
 
 ## Discover
 
+`GET /api/labels/album?album_id=<22-character Spotify ID>` returns
+`{album_id, label}` for that exact album. Unknown labels return an empty string;
+provider errors return 502 and malformed IDs 422. Read-only clients may use
+it. No copyright-to-label inference, audio acquisition or tag writes occur.
+
+`GET /api/labels/releases?label=Frucht&year=2020` returns the exact-label
+releases of one release year: `{label, year, releases, complete, partial_reason,
+search_total, excluded, self_released, unverified, scope: exact_spotify_label}`.
+Each release carries the album's own `label` and full `release_date`. A year
+whose search reaches Spotify's 100-result cap returns `complete: false` with
+`partial_reason: year_limit`. Without `year` the whole label is assembled
+(`total` is the number of exact matches). Invalid labels or years return 422;
+provider failures return 502. Completed results are cached for up to 30 minutes.
+
 Suggested artists, counted listens and hidden artists — see [Discover](features/discover.md).
 
 ### `POST /api/discover`

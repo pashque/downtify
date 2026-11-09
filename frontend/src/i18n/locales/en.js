@@ -1,4 +1,17 @@
 export default {
+  labels: {
+    subtitle: 'Record label · Spotify discovery',
+    limited:
+      'Only releases whose Spotify label is exactly this label, newest first. Releases Spotify does not list may be missing. Open a release to play or download its tracks.',
+    scanning: '{count} releases so far · checking {year}…',
+    loaded: '{count} releases · exact label match, newest first',
+    partial:
+      'Partial results · {count} releases verified. Could not check: {years}.',
+    releases: 'Releases',
+    empty:
+      'No releases with exactly this label were found. This does not mean the label has no releases.',
+    example: 'Explore LuckyMe · Jacques Greene’s label',
+  },
   language: {
     name: 'English',
   },
@@ -444,24 +457,24 @@ export default {
       compilation: 'Compilation',
     },
     downloadFullKind: {
-      album: "Download full album",
-      single: "Download full single",
-      ep: "Download full EP",
-      compilation: "Download full compilation",
+      album: 'Download full album',
+      single: 'Download full single',
+      ep: 'Download full EP',
+      compilation: 'Download full compilation',
     },
     downloadAgainKind: {
-      album: "Download album again",
-      single: "Download single again",
-      ep: "Download EP again",
-      compilation: "Download compilation again",
+      album: 'Download album again',
+      single: 'Download single again',
+      ep: 'Download EP again',
+      compilation: 'Download compilation again',
     },
     downloadKind: {
-      album: "Download album",
-      single: "Download single",
-      ep: "Download EP",
-      compilation: "Download compilation",
+      album: 'Download album',
+      single: 'Download single',
+      ep: 'Download EP',
+      compilation: 'Download compilation',
     },
-    loadingTracks: "Loading the full tracklist…",
+    loadingTracks: 'Loading the full tracklist…',
     downloadMissing: 'Download missing tracks',
     notFound: 'Album not found',
     moreBy: 'More by {artist}',
@@ -920,7 +933,8 @@ export default {
     playlistLibraryHint: 'Playlist audio shares the artist/album library.',
     playlistSeparateHint: 'Save playlist audio inside its own separate folder.',
     playlistFolderHint: 'Save playlist audio inside its own playlist folder.',
-    playlistFlatHint: 'Save playlist audio flat in the shared downloads folder.',
+    playlistFlatHint:
+      'Save playlist audio flat in the shared downloads folder.',
     legacyFoldersHint:
       'Legacy folder settings are still active. Turn folder structure on to select the new layout, or on then off to make all audio flat. Changes apply to future downloads only.',
     template: 'File name',

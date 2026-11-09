@@ -1,6 +1,7 @@
 import en from './en.js'
 
 export default {
+  labels: en.labels,
   language: {
     name: 'Български',
   },
